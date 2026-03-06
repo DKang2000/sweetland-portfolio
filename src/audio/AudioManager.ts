@@ -45,13 +45,6 @@ const OST_WAV_BY_ZONE: Record<ZoneId, string> = {
   portal_approach: "11. Spright - Sweet Land OST.wav",
 };
 
-const OST_WAV_BY_PORTAL: Partial<Record<PortfolioSectionId, string>> = {
-  projects: "8. Whirl - Sweet Land OST.wav",
-  work: "5. Jubilee - Sweet Land OST.wav",
-  collabs: "7. Bubblebounce - Sweet Land OST.wav",
-  contact: "12. Whimsy - Sweet Land OST.wav",
-};
-
 const SFX_URLS: Record<string, string> = {
   // Pickups
   coin: "/audio/sfx/PickUpItems/Coin.wav",
@@ -355,16 +348,11 @@ if (!this.musicMuted) {
   }
 
   /** Portal preview opened (E). */
-  onPortalPanelOpen(id?: PortfolioSectionId): void {
+  onPortalPanelOpen(_id?: PortfolioSectionId): void {
     if (!this.started) this.onFirstGesture();
 
     this.portalPanelOpen = true;
     this.playSfx("portal_in");
-
-    if (this.musicMuted) return;
-
-    const track = (id && OST_WAV_BY_PORTAL[id]) || OST_WAV_BY_ZONE.portals;
-    this.setTrack(track);
   }
 
   /** Portal preview closed (Esc). */
