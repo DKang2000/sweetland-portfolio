@@ -1,4 +1,3 @@
-import RAPIER from "@dimforge/rapier3d-compat";
 import { Emitter } from "../core/Emitter";
 
 export type ColliderKind = "coin" | "portal" | "npc" | "other";
@@ -13,9 +12,9 @@ type Events = {
 };
 
 export class Physics {
-  R!: typeof RAPIER;
-  world!: RAPIER.World;
-  eventQueue!: RAPIER.EventQueue;
+  R!: typeof import("@dimforge/rapier3d-compat");
+  world!: import("@dimforge/rapier3d-compat").World;
+  eventQueue!: import("@dimforge/rapier3d-compat").EventQueue;
 
   // Map collider handles -> gameplay tags.
   private tags = new Map<number, ColliderTag>();
@@ -23,6 +22,8 @@ export class Physics {
   events = new Emitter<Events>();
 
   async init(): Promise<void> {
+    const rapierModule = await import("@dimforge/rapier3d-compat");
+    const RAPIER = rapierModule.default;
     await RAPIER.init();
     this.R = RAPIER;
     this.world = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
@@ -43,11 +44,11 @@ export class Physics {
     });
   }
 
-  tagCollider(collider: RAPIER.Collider, tag: ColliderTag): void {
+  tagCollider(collider: import("@dimforge/rapier3d-compat").Collider, tag: ColliderTag): void {
     this.tags.set(collider.handle, tag);
   }
 
-  untagCollider(collider: RAPIER.Collider): void {
+  untagCollider(collider: import("@dimforge/rapier3d-compat").Collider): void {
     this.tags.delete(collider.handle);
   }
 

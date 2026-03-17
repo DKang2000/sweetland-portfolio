@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import { Input } from "../core/Input";
 import { qs } from "../core/dom";
+import { DeviceProfileStore } from "../core/DeviceProfile";
 import { Physics } from "../physics/Physics";
 import { Level } from "../world/Level";
 import { Player } from "../player/Player";
 import { ThirdPersonCamera } from "../player/ThirdPersonCamera";
 import { UI } from "../ui/UI";
+import { MobileControls } from "../ui/MobileControls";
 import { AudioManager } from "../audio/AudioManager";
 import { PORTFOLIO_SECTIONS } from "../config/portfolio";
 import type { PortfolioSectionId } from "../config/portfolio";
@@ -714,9 +716,24 @@ export class App {
   private minimapHudLastSize = 0;
 
   private input = new Input(this.canvas);
+  private device = new DeviceProfileStore();
   private physics = new Physics();
   private ui = new UI();
+  private mobileControls = new MobileControls(this.input);
   private audio = new AudioManager();
+  private sunLight: THREE.DirectionalLight | null = null;
+  private lowFxEnabled = this.device.current.useLowFx;
+  private minimapVisible = !this.device.current.useCompactMinimap;
+  private minimapFrame = 0;
+  private minimapRenderInterval = this.device.current.isMobileExperience ? 3 : 1;
+  private musicMuted = false;
+  private qualityPreferenceLocked = false;
+  private minimapPreferenceLocked = false;
+  private autoLowFxTriggered = false;
+  private frameTimeAvg = 1 / 60;
+  private poorFrameTimeWindow = 0;
+  private readonly lowFxStorageKey = "sweetland:pref:lowFx";
+  private readonly minimapStorageKey = "sweetland:pref:minimap";
 
   private player!: Player;
   private tpc!: ThirdPersonCamera;
@@ -820,8 +837,25 @@ export class App {
   private coins = 0;
 
   async init(): Promise<void> {
+    this.bootstrapUserPreferences();
     this.setupRenderer();
     this.setupScene();
+    this.applyExperienceProfile(this.device.current);
+
+    this.device.events.on("change", (profile) => {
+      this.applyExperienceProfile(profile);
+    });
+
+    this.ui.onPromptAction = () => {
+      if (this.device.current.isMobileExperience) this.interact();
+    };
+    this.mobileControls.onAction = () => this.interact();
+    this.mobileControls.onMute = () => this.toggleMusicMute();
+    this.mobileControls.onRespawn = () => this.warpToHub();
+    this.mobileControls.onQualityToggle = () => this.toggleLowFx();
+    this.mobileControls.onMapToggle = () => this.toggleMinimap();
+    this.mobileControls.onResetCollectibles = () => this.resetCoins();
+    this.mobileControls.onPortalShortcut = (section) => this.teleportToSection(section);
 
     this.ui.setLoading(true);
     this.ui.setLoadingProgress(0);
@@ -858,6 +892,7 @@ this.swapPlayerVisualFromNpc("nutty_knight");
 
 this.scene.add(this.player.mesh);
     this.ui.setLoadingProgress(92);
+    this.applyQualityProfile();
 
     this.tpc = new ThirdPersonCamera(this.camera);
 
@@ -921,7 +956,9 @@ this.scene.add(this.player.mesh);
         return;
       }
       if (this.uiIsBlocking()) return;
-      if (document.pointerLockElement !== this.canvas) this.canvas.requestPointerLock();
+      if (!this.device.current.isMobileExperience && document.pointerLockElement !== this.canvas) {
+        this.canvas.requestPointerLock();
+      }
       this.ui.setLoading(false);
     });
 
@@ -930,30 +967,6 @@ this.scene.add(this.player.mesh);
       "keydown",
       (e) => {
         if (e.repeat) return;
-
-        // respawn / warp to hub
-        if (e.code === "KeyR") this.warpToHub();
-
-        // Reset coins
-        if (e.code === "KeyR") this.resetCoins();
-
-
-        // Music mute toggle
-        if (e.code === "KeyM") {
-          e.preventDefault();
-
-          const a: any = this.audio;
-
-          // Prefer music-only toggle (BGM). Fallback to global mute only if needed.
-          const muted =
-            typeof a?.toggleMusicMute === "function"
-              ? a.toggleMusicMute()
-              : typeof a?.toggleMute === "function"
-                ? a.toggleMute()
-                : null;
-
-          console.log("[SweetLand] Music toggle:", muted ? "MUTED" : "UNMUTED");
-        }
 
         // SWEETLAND_SFX_ENABLE_ALL_V3: universal SFX wiring + test hotkeys
         // Space -> jump SFX (does not block gameplay)
@@ -1009,13 +1022,6 @@ if (e.code === "KeyK" && e.shiftKey) {
   // eslint-disable-next-line no-console
   console.log("[SweetLand] Cleared slab02 position override.");
 }
-        // Interact
-        if (e.code === "KeyE") this.interact();
-
-        // Teleport to portal platforms 1-4 (per your spec)
-        for (const sec of PORTFOLIO_SECTIONS) {
-          if (e.code === sec.hotkey) this.teleportToSection(sec.id);
-        }
       },
       { capture: true }
     );
@@ -1031,7 +1037,9 @@ if (e.code === "KeyK" && e.shiftKey) {
         this.ensureAudio();
         try { this.audio.onFirstGesture(); } catch {}
         this.ui.setLoading(false);              // hide the blur overlay
-        this.canvas.requestPointerLock?.();     // enable mouse-look
+        if (!this.device.current.isMobileExperience) {
+          this.canvas.requestPointerLock?.();
+        }
       },
       { once: true }
     );
@@ -1059,11 +1067,82 @@ if (e.code === "KeyK" && e.shiftKey) {
     requestAnimationFrame((t) => this.frame(t));
   }
 
+  private applyExperienceProfile(profile: any): void {
+    this.ui.applyDeviceProfile(profile);
+    this.mobileControls.applyProfile(profile);
+    if (this.tpc) {
+      this.tpc.distance = profile.isMobileExperience ? 7.4 : 8.2;
+      this.tpc.height = profile.isMobileExperience ? 2.8 : 3.0;
+    }
+
+    if (!this.minimapPreferenceLocked && profile.isMobileExperience && profile.useCompactMinimap) {
+      this.minimapVisible = false;
+    } else if (!this.minimapPreferenceLocked && !profile.isMobileExperience) {
+      this.minimapVisible = true;
+    }
+
+    if (!this.qualityPreferenceLocked && !this.autoLowFxTriggered) {
+      this.lowFxEnabled = profile.useLowFx;
+    }
+    this.minimapRenderInterval = profile.isMobileExperience ? 3 : 1;
+    this.applyQualityProfile();
+    this.mobileControls.setMutedState(this.musicMuted);
+    this.mobileControls.setLowFxState(this.lowFxEnabled);
+    this.mobileControls.setMinimapExpanded(this.minimapVisible);
+    document.body.classList.toggle("minimap-hidden", !this.minimapVisible);
+  }
+
+  private applyQualityProfile(): void {
+    const profile = this.device.current;
+    const dprClamp = this.lowFxEnabled ? 1.1 : profile.isMobileExperience ? 1.25 : 2;
+    this.renderer.setPixelRatio(Math.min(profile.pixelRatio, dprClamp));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = this.lowFxEnabled ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
+
+    if (this.sunLight) {
+      const mapSize = this.lowFxEnabled ? 1024 : 2048;
+      this.sunLight.castShadow = true;
+      this.sunLight.shadow.mapSize.set(mapSize, mapSize);
+      this.sunLight.shadow.bias = this.lowFxEnabled ? -0.0008 : -0.0005;
+      this.sunLight.shadow.needsUpdate = true;
+    }
+  }
+
+  private toggleLowFx(): void {
+    this.lowFxEnabled = !this.lowFxEnabled;
+    this.qualityPreferenceLocked = true;
+    this.autoLowFxTriggered = false;
+    this.writeBoolStorage(this.lowFxStorageKey, this.lowFxEnabled);
+    this.applyQualityProfile();
+    this.mobileControls.setLowFxState(this.lowFxEnabled);
+  }
+
+  private toggleMinimap(): void {
+    this.minimapVisible = !this.minimapVisible;
+    this.minimapPreferenceLocked = true;
+    this.writeBoolStorage(this.minimapStorageKey, this.minimapVisible);
+    document.body.classList.toggle("minimap-hidden", !this.minimapVisible);
+    this.mobileControls.setMinimapExpanded(this.minimapVisible);
+  }
+
+  private toggleMusicMute(): void {
+    const muted = this.audio.toggleMusicMute();
+    this.musicMuted = muted;
+    this.mobileControls.setMutedState(muted);
+  }
+
+  private shouldRenderMinimap(): boolean {
+    if (!this.minimapVisible) return false;
+    if (!this.device.current.isMobileExperience) return true;
+    this.minimapFrame = (this.minimapFrame + 1) % this.minimapRenderInterval;
+    return this.minimapFrame === 0;
+  }
+
   private setupRenderer(): void {
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(this.device.current.pixelRatio, this.lowFxEnabled ? 1.1 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = this.lowFxEnabled ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.15;
@@ -1152,6 +1231,7 @@ if (e.code === "KeyK" && e.shiftKey) {
     sun.shadow.camera.right = 120;
     sun.shadow.camera.top = 120;
     sun.shadow.camera.bottom = -120;
+    this.sunLight = sun;
     this.scene.add(sun);
 
     const fill = new THREE.DirectionalLight(0xfff5fb, 0.25);
@@ -1164,6 +1244,8 @@ if (e.code === "KeyK" && e.shiftKey) {
   private resize(): void {
     const w = window.innerWidth;
     const h = window.innerHeight;
+    this.device.refresh();
+    this.applyQualityProfile();
     this.renderer.setSize(w, h, false);
 
     this.camera.aspect = w / h;
@@ -1173,6 +1255,7 @@ if (e.code === "KeyK" && e.shiftKey) {
   private frame(tNow: number): void {
     const dt = Math.min(0.05, (tNow - this.lastT) / 1000);
     this.lastT = tNow;
+    this.trackFramePerformance(dt);
 
     // Mouse look
     const { dx, dy } = this.input.consumeMouseDelta();
@@ -1193,10 +1276,101 @@ if (e.code === "KeyK" && e.shiftKey) {
     requestAnimationFrame((t) => this.frame(t));
   }
 
+  private bootstrapUserPreferences(): void {
+    const storedLowFx = this.readBoolStorage(this.lowFxStorageKey);
+    const storedMinimap = this.readBoolStorage(this.minimapStorageKey);
+
+    if (storedLowFx !== null) {
+      this.lowFxEnabled = storedLowFx;
+      this.qualityPreferenceLocked = true;
+    }
+
+    if (storedMinimap !== null) {
+      this.minimapVisible = storedMinimap;
+      this.minimapPreferenceLocked = true;
+    }
+  }
+
+  private trackFramePerformance(dt: number): void {
+    this.frameTimeAvg = this.frameTimeAvg * 0.92 + dt * 0.08;
+    const profile = this.device.current;
+
+    if (!profile.isMobileExperience || this.lowFxEnabled || this.qualityPreferenceLocked) {
+      this.poorFrameTimeWindow = 0;
+      return;
+    }
+
+    if (this.frameTimeAvg > 1 / 26) {
+      this.poorFrameTimeWindow += dt;
+      if (this.poorFrameTimeWindow > 2.4 && !this.autoLowFxTriggered) {
+        this.autoLowFxTriggered = true;
+        this.lowFxEnabled = true;
+        this.applyQualityProfile();
+        this.mobileControls.setLowFxState(true);
+      }
+    } else {
+      this.poorFrameTimeWindow = Math.max(0, this.poorFrameTimeWindow - dt * 1.5);
+    }
+  }
+
+  private readBoolStorage(key: string): boolean | null {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (raw === null) return null;
+      return raw === "1";
+    } catch {
+      return null;
+    }
+  }
+
+  private writeBoolStorage(key: string, value: boolean): void {
+    try {
+      window.localStorage.setItem(key, value ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }
+
+  private processQueuedActions(): void {
+    if (this.input.consumeMutePressed()) {
+      this.toggleMusicMute();
+    }
+
+    if (this.input.consumeRespawnPressed()) {
+      this.warpToHub();
+    }
+
+    if (this.input.consumeResetCollectiblesPressed()) {
+      this.resetCoins();
+    }
+
+    if (this.input.consumeQualityTogglePressed()) {
+      this.toggleLowFx();
+    }
+
+    if (this.input.consumeMapTogglePressed()) {
+      this.toggleMinimap();
+    }
+
+    let portalShortcut = this.input.consumePortalShortcutRequested();
+    while (portalShortcut) {
+      if (!this.uiIsBlocking() && !this.portalCine) {
+        this.teleportToSection(portalShortcut);
+      }
+      portalShortcut = this.input.consumePortalShortcutRequested();
+    }
+
+    if (this.input.consumeInteractPressed()) {
+      this.interact();
+    }
+  }
+
   private fixedUpdate(dt: number, t: number): void {
     // Ladder proximity (Minecraft-style climbing)
     const ladder = this.level.getLadderAt(this.player.position);
     this.player.setLadder(ladder);
+    this.processQueuedActions();
+    this.mobileControls.setGameplayBlocked(this.uiIsBlocking() || !!this.portalCine || this.portalUiOpen);
 
     const __portalLock = !!this.portalCine || this.portalUiOpen;
     if (!__portalLock) {
@@ -1277,7 +1451,9 @@ if (e.code === "KeyK" && e.shiftKey) {
       this.tpc.update(this.player.position, dt);
     }
 
-    this.updateMinimapCamera();
+    if (this.minimapVisible) {
+      this.updateMinimapCamera();
+    }
 
     this.updateNpcPlacementMarker();
   }
@@ -1291,6 +1467,7 @@ if (e.code === "KeyK" && e.shiftKey) {
     // SWEETLAND_PORTAL_CINEMATIC_V1
     if (this.portalCine || this.portalUiOpen) return;
     if (this.uiIsBlocking()) return;
+    this.faceCurrentFocusTarget();
 
     if (this.focus.kind === "portal") {
       this.enterPortal(this.focus.id as PortfolioSectionId);
@@ -1418,6 +1595,24 @@ const __slLines = (__slScript?.lines ?? __slNpcLinesFromFocusV8d(this.focus, thi
     // NOTE: We can add portal/other interactions here later.
   }
 
+  private faceCurrentFocusTarget(): void {
+    if (!this.focus) return;
+
+    const target = new THREE.Vector3();
+    if (this.focus.kind === "portal") {
+      const portal = this.level.portals.get(this.focus.id as PortfolioSectionId);
+      portal?.group.getWorldPosition(target);
+    } else if (this.focus.kind === "npc") {
+      const npc = this.level.npcs.get(this.focus.id);
+      npc?.group.getWorldPosition(target);
+    }
+
+    const deltaX = target.x - this.player.position.x;
+    const deltaZ = target.z - this.player.position.z;
+    if (deltaX * deltaX + deltaZ * deltaZ < 0.001) return;
+    this.player.setRotationY(Math.atan2(deltaX, deltaZ));
+  }
+
   private updateInteractions(): void {
     // --- Collectibles (always active)
     const pt = this.player.body.translation();
@@ -1506,12 +1701,14 @@ for (const it of bakedToCollect) {
       // Placement mode owns the prompt; do not update focus.
       this.focus = null;
       this.updateNpcPlacementPrompt();
+      this.mobileControls.setActionState({ label: "Talk", visible: false });
       return;
     }
     if (this.npcPossessActive) {
       // Possession placement mode: disable focus/prompts.
       this.focus = null;
       this.ui.showPrompt(null);
+      this.mobileControls.setActionState({ label: "Talk", visible: false });
       return;
     }
 
@@ -1520,10 +1717,12 @@ for (const it of bakedToCollect) {
         this.focus = null;
         this.ui.showPrompt(null);
       }
+      this.mobileControls.setActionState({ label: "Talk", visible: false });
       return;
     }
 
-    const interactR2 = this.interactRadius * this.interactRadius;
+    const interactRadius = this.device.current.isMobileExperience ? 3.15 : this.interactRadius;
+    const interactR2 = interactRadius * interactRadius;
     let best: Focus = null;
     let bestD2 = Infinity;
 
@@ -1562,14 +1761,23 @@ for (const it of bakedToCollect) {
       this.focus = best;
       if (best === null) {
         this.ui.showPrompt(null);
+        this.mobileControls.setActionState({ label: "Talk", visible: false });
       } else if (best.kind === "portal") {
-        this.ui.showPrompt(`Enter ${String(best.id).toUpperCase()} portal`);
+        this.ui.showPrompt(
+          `Enter ${String(best.id).toUpperCase()} portal`,
+          this.device.current.isMobileExperience ? "Tap to enter" : undefined
+        );
+        this.mobileControls.setActionState({ label: "Enter", visible: this.device.current.isMobileExperience });
       } else if (best.kind === "npc") {
         const npc = this.level.npcs.get(best.id);
         const rawName = npc?.name ?? "Friend";
         const dispName = SWEETLAND_NPC_NAME_OVERRIDES[rawName] ?? rawName;
         if (npc && this.focus) (this.focus as any).uiName = dispName;
-        this.ui.showPrompt(npc ? `Talk to ${__slNpcDisplayNameFromPromptNameV9(__slNpcDisplayNameV8d(__slNpcDisplayName(dispName)))}` : "Talk");
+        this.ui.showPrompt(
+          npc ? `Talk to ${__slNpcDisplayNameFromPromptNameV9(__slNpcDisplayNameV8d(__slNpcDisplayName(dispName)))}` : "Talk",
+          this.device.current.isMobileExperience ? "Tap to talk" : undefined
+        );
+        this.mobileControls.setActionState({ label: "Talk", visible: this.device.current.isMobileExperience });
       }
     }
   }
@@ -2147,11 +2355,15 @@ private render(): void {
   const h = window.innerHeight;
 
   // --- minimap (render to texture, then draw rounded quad) ---
-  const mmSize = Math.floor(Math.min(w, h) * 0.26);
-  const mmPad = 16;
-  this.ensureRoundedMinimapResources(mmSize, mmPad, w, h);
+  const mmSize = this.device.current.isMobileExperience
+    ? Math.floor(Math.min(w, h) * 0.2)
+    : Math.floor(Math.min(w, h) * 0.26);
+  const mmPad = this.device.current.isMobileExperience ? 12 : 16;
+  if (this.minimapVisible) {
+    this.ensureRoundedMinimapResources(mmSize, mmPad, w, h);
+  }
 
-  if (this.minimapRT) {
+  if (this.minimapVisible && this.minimapRT && this.shouldRenderMinimap()) {
     const rt = this.minimapRTSize;
     this.renderer.setRenderTarget(this.minimapRT);
     this.renderer.setViewport(0, 0, rt, rt);
@@ -2167,7 +2379,7 @@ private render(): void {
   this.renderer.render(this.scene, this.camera);
 
   // --- minimap overlay ---
-  if (this.minimapHudMesh) {
+  if (this.minimapVisible && this.minimapHudMesh) {
     const prevAutoClear = this.renderer.autoClear;
     this.renderer.autoClear = false;
     this.renderer.clearDepth();

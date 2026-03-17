@@ -2,8 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, maximum-scale=1" />
     <title>Sweet Land Portfolio</title>
+    <link rel="preconnect" href="https://assets.imchloekang.com" crossorigin />
+    <link rel="dns-prefetch" href="https://assets.imchloekang.com" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
@@ -33,10 +36,10 @@
 
       <!-- Interaction prompt -->
       <div id="prompt" class="hidden">
-        <div class="prompt-card">
+        <button id="promptCard" class="prompt-card prompt-button" type="button">
           <div id="promptTitle" class="prompt-title">Interact</div>
-          <div class="prompt-sub"><span class="kbd">E</span> interact</div>
-        </div>
+          <div id="promptHint" class="prompt-sub"><span class="kbd">E</span> interact</div>
+        </button>
       </div>
 
       <!-- Dialogue -->
@@ -72,9 +75,10 @@
           <div class="panel-body">
             <div class="panel-actions">
               <a id="panelOpenLink" class="btn" target="_blank" rel="noreferrer">Open in new tab</a>
+              <div id="panelEmbedNote" class="note">If the preview is blocked, open the page in a new tab.</div>
             </div>
 
-            <div class="panel-iframeWrap">
+            <div id="panelIframeWrap" class="panel-iframeWrap">
               <iframe
                 id="panelIframe"
                 title="Portfolio preview"
@@ -89,11 +93,57 @@
 
       <!-- Loading -->
       <div id="loading">
-        <div class="loading-card">
-          <div class="loading-title">Welcome to the Chloeverse!</div>
-          <div class="loading-sub">Click anywhere to start (this locks your mouse so you can look around)<br>Press <span class="kbd">Esc</span> anytime to unlock your mouse / get your cursor back</div>
+        <div id="loadingCard" class="loading-card">
+          <div id="loadingTitle" class="loading-title">Welcome to the Chloeverse!</div>
+          <div id="loadingSub" class="loading-sub">Click anywhere to start (this locks your mouse so you can look around)<br>Press <span class="kbd">Esc</span> anytime to unlock your mouse / get your cursor back</div>
           <div id="loadingTip" class="loading-tip"></div>
           <div id="loadingProgress" class="loading-progress">0%</div>
+        </div>
+      </div>
+
+      <div id="mobileControls" class="hidden" aria-hidden="true">
+        <div class="mobile-top mobile-left-stack">
+          <button id="mobileMuteButton" class="btn small mobile-button" type="button">Sound On</button>
+          <button id="mobileRespawnButton" class="btn small mobile-button" type="button">Respawn</button>
+        </div>
+
+        <div class="mobile-top mobile-right-stack">
+          <button id="mobileMinimapButton" class="btn small mobile-button" type="button">Map Off</button>
+          <button id="mobileQualityButton" class="btn small mobile-button" type="button">Low FX</button>
+          <button id="mobilePortalsButton" class="btn small mobile-button" type="button">Portals</button>
+        </div>
+
+        <div id="mobileLookRegion" aria-hidden="true"></div>
+
+        <div class="mobile-bottom">
+          <div id="mobileJoystick" class="mobile-joystick" aria-label="Movement joystick">
+            <div class="mobile-joystick-center"></div>
+            <div id="mobileJoystickKnob" class="mobile-joystick-knob"></div>
+          </div>
+
+          <div class="mobile-action-cluster">
+            <button id="mobileResetButton" class="btn small mobile-button mobile-reset" type="button">Reset</button>
+            <button id="mobileActionButton" class="btn mobile-action hidden" type="button">Talk</button>
+          </div>
+        </div>
+
+        <div id="mobilePortalDrawer" class="mobile-drawer hidden" role="dialog" aria-modal="false">
+          <button id="mobilePortalDrawerBackdrop" class="mobile-drawer-backdrop" type="button" aria-label="Close portals drawer"></button>
+          <div class="mobile-drawer-sheet">
+            <div class="mobile-drawer-header">
+              <div>
+                <div class="mobile-drawer-title">Portals</div>
+                <div class="mobile-drawer-copy">Teleport to a portal pedestal, then enter it in-world.</div>
+              </div>
+              <button id="mobilePortalDrawerClose" class="btn small mobile-button" type="button">Close</button>
+            </div>
+            <div class="mobile-drawer-grid">
+              <button class="btn mobile-button mobile-portal-chip" data-portal-target="projects" type="button">Projects</button>
+              <button class="btn mobile-button mobile-portal-chip" data-portal-target="collabs" type="button">Collabs</button>
+              <button class="btn mobile-button mobile-portal-chip" data-portal-target="work" type="button">Work</button>
+              <button class="btn mobile-button mobile-portal-chip" data-portal-target="contact" type="button">Contact</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -111,15 +161,28 @@ document.addEventListener("DOMContentLoaded", () => {
   // Make sure the container can display multiple lines nicely even if CSS was single-line
   tip.style.whiteSpace = "normal";
 
-  const tips = [
-    "Move: WASD",
-    "Run: hold Shift",
-    "Jump: Space (press twice to double jump)",
-    "Skip exploring (teleport): press 1–4 to jump to the portals",
-    "Talk / interact: E when you see a prompt",
-    "Respawn: press R",
-    "Mute music: M",
-  ];
+  const isMobile =
+    document.documentElement.dataset.experience === "mobile" ||
+    new URLSearchParams(window.location.search).get("forceMobile") === "1";
+
+  const tips = isMobile
+    ? [
+        "Move: left joystick",
+        "Look: drag the right side",
+        "Jump: tap the middle of the joystick",
+        "Talk / enter: use the action button or prompt pill",
+        "Portals: use the Portals drawer to jump to a pedestal",
+        "Respawn and sound controls live in the top corners",
+      ]
+    : [
+        "Move: WASD",
+        "Run: hold Shift",
+        "Jump: Space (press twice to double jump)",
+        "Skip exploring (teleport): press 1–4 to jump to the portals",
+        "Talk / interact: E when you see a prompt",
+        "Respawn: press R",
+        "Mute music: M",
+      ];
 
   let idx = 0;
   let timer = null;

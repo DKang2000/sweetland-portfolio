@@ -680,6 +680,18 @@ private async loadAvatar(): Promise<void> {
     this.velY = 0;
   }
 
+  setRotationY(yaw: number): void {
+    this.mesh.rotation.y = yaw;
+  }
+
+  getFootOffset(): number {
+    return 0.8;
+  }
+
+  setCapsulePreset(): void {
+    // Compatibility no-op for older app patches.
+  }
+
   setLadder(ladder: { center: THREE.Vector3; minY: number; maxY: number } | null): void {
     if (this.ladderCooldown > 0) return;
     if (!ladder) {
@@ -696,8 +708,9 @@ private async loadAvatar(): Promise<void> {
 
   update(dt: number, cameraYaw: number): void {
     // Inputs
-    const fIn = (this.input.down("KeyW") ? 1 : 0) + (this.input.down("KeyS") ? -1 : 0);
-    const rIn = (this.input.down("KeyD") ? 1 : 0) + (this.input.down("KeyA") ? -1 : 0);
+    const moveAxes = this.input.getMoveAxes();
+    const fIn = moveAxes.y;
+    const rIn = moveAxes.x;
 
     // Build movement basis from camera yaw
     const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
@@ -707,7 +720,7 @@ private async loadAvatar(): Promise<void> {
     const v = camForward.clone().multiplyScalar(fIn).add(camRight.clone().multiplyScalar(rIn));
     if (v.lengthSq() > 1) v.normalize();
 
-    this.running = this.input.down("ShiftLeft") || this.input.down("ShiftRight");
+    this.running = this.input.isRunHeld() || (this.input.isMobileMoving() && moveAxes.strength > 0.92);
     const speed = this.running ? this.runSpeed : this.walkSpeed;
 
     // Ladder cooldown
@@ -720,7 +733,7 @@ private async loadAvatar(): Promise<void> {
       const climbSpeed = 4.8;
       const slideSpeed = -1.2;
 
-      if (this.input.down("Space")) {
+      if (this.input.consumeJumpPressed()) {
         this.velY = this.jumpSpeed;
         this.onLadder = false;
         this.ladderCooldown = 0.30;
@@ -743,10 +756,8 @@ private async loadAvatar(): Promise<void> {
       (this as any).coyoteTimer = this.grounded ? 0.10 : Math.max(0, ((this as any).coyoteTimer || 0) - dt);
 
 
-      const __spaceDown = this.input.down("Space");
-
-      const __jumpPressed = __spaceDown && !this.jumpWasDown;
-
+      const __spaceDown = this.input.isJumpHeld();
+      const __jumpPressed = this.input.consumeJumpPressed();
       this.jumpWasDown = __spaceDown;
 
 
@@ -787,7 +798,7 @@ private async loadAvatar(): Promise<void> {
 
     // --- Desired displacement
     let yDisp = this.velY * dt;
-    if (this.grounded && !this.input.down("Space") && !this.onLadder) yDisp = Math.min(yDisp, -0.25 * dt);
+    if (this.grounded && !this.input.isJumpHeld() && !this.onLadder) yDisp = Math.min(yDisp, -0.25 * dt);
 
     let xDisp = v.x * speed * dt;
     let zDisp = v.z * speed * dt;

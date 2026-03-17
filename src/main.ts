@@ -1,19 +1,55 @@
-import { installHudRespawnLabelFix } from "./ui/hudRespawnLabelFix";
-import { App } from "./app/App";
-import { installCollectibleBanner } from "./ui/celebrationBanner";
-import { installRespawnHintRuntimePatch } from "./ui/respawnHintRuntimePatch";
-import { installRespawnHudLabel } from "./ui/respawnHudLabel";
+import { detectDeviceProfile } from "./core/DeviceProfile";
+import { renderWebGLFallback } from "./ui/WebGLFallback";
 
-const app = new App();
-installHudRespawnLabelFix();
-installRespawnHudLabel();
-installRespawnHintRuntimePatch();
+function canUseWebGL(): boolean {
+  try {
+    const canvas = document.createElement("canvas");
+    return !!(
+      canvas.getContext("webgl2") ||
+      canvas.getContext("webgl") ||
+      canvas.getContext("experimental-webgl")
+    );
+  } catch {
+    return false;
+  }
+}
 
-// start the HUD watcher that shows the banner at 70/83
-installCollectibleBanner();
+function installTouchViewportLock(): void {
+  const preventInsideApp = (event: Event) => {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest("#app")) return;
+    event.preventDefault();
+  };
 
-app.init().catch((err) => {
-  console.error(err);
-  alert(String(err));
-});
+  document.addEventListener("touchmove", preventInsideApp, { passive: false });
+  document.addEventListener("gesturestart", preventInsideApp as EventListener, { passive: false });
+  document.addEventListener("gesturechange", preventInsideApp as EventListener, { passive: false });
+}
 
+const profile = detectDeviceProfile();
+if (profile.isMobileExperience) {
+  installTouchViewportLock();
+}
+
+if (!canUseWebGL()) {
+  renderWebGLFallback("This browser couldn’t start Candy Castle’s 3D renderer, so here are Chloe’s portal destinations instead.");
+} else {
+  const bootRuntime = () => {
+    import("./bootstrapGame")
+      .then(({ startGame }) => startGame(profile))
+      .catch((err) => {
+        console.error(err);
+        renderWebGLFallback(
+          profile.isMobileExperience
+            ? "Candy Castle ran into a startup issue on this phone, but Chloe’s portals are still here for you."
+            : "Candy Castle ran into a startup issue, but Chloe’s portals are still here for you."
+        );
+      });
+  };
+
+  if ("requestAnimationFrame" in window) {
+    window.requestAnimationFrame(() => bootRuntime());
+  } else {
+    window.setTimeout(bootRuntime, 0);
+  }
+}
