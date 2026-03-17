@@ -98,9 +98,9 @@ export class UI {
     } else {
       this.loadingTitle.textContent = "Welcome to the Chloeverse!";
       this.loadingSub.innerHTML =
-        'Click anywhere to start (this locks your mouse so you can look around)<br>Press <span class="kbd">Esc</span> anytime to unlock your mouse / get your cursor back';
+        'Click anywhere to start<br><span class="kbd">WASD</span> moves, mouse drag optionally adjusts the camera, and the camera follows you automatically<br><span class="kbd">Esc</span> closes overlays';
       this.helpText.innerHTML =
-        '<span class="kbd">WASD</span> move · <span class="kbd">Shift</span> run · <span class="kbd">Space</span> jump (double) · <span class="kbd">E</span> interact · <span class="kbd">1–4</span> portals · <span id="musicHint"><span class="kbd">M</span> mute</span> · <span class="kbd">Esc</span> close';
+        '<span class="kbd">WASD</span> move · <span class="kbd">Shift</span> run · <span class="kbd">Space</span> jump (double) · <span class="kbd">Mouse drag</span> optional camera · camera auto-follows · <span class="kbd">E</span> interact · <span class="kbd">1–4</span> portals · <span id="musicHint"><span class="kbd">M</span> mute</span> · <span class="kbd">Esc</span> close';
       this.promptHintEl.innerHTML = '<span class="kbd">E</span> interact';
       this.panelEmbedNote.textContent = "If the preview is blocked, open the page in a new tab.";
     }

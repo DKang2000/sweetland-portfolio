@@ -958,9 +958,6 @@ this.scene.add(this.player.mesh);
         return;
       }
       if (this.uiIsBlocking()) return;
-      if (!this.device.current.isMobileExperience && document.pointerLockElement !== this.canvas) {
-        this.canvas.requestPointerLock();
-      }
       this.ui.setLoading(false);
     });
 
@@ -1032,16 +1029,13 @@ if (e.code === "KeyK" && e.shiftKey) {
     window.addEventListener("resize", () => this.resize());
 
     this.ui.setLoadingProgress(100);
-    // ✅ Wait for the first click (user gesture) then hide loading + lock mouse
+    // ✅ Wait for the first click (user gesture) then hide loading and enable audio.
     window.addEventListener(
       "pointerdown",
       () => {
         this.ensureAudio();
         try { this.audio.onFirstGesture(); } catch {}
         this.ui.setLoading(false);              // hide the blur overlay
-        if (!this.device.current.isMobileExperience) {
-          this.canvas.requestPointerLock?.();
-        }
       },
       { once: true }
     );
@@ -1072,6 +1066,7 @@ if (e.code === "KeyK" && e.shiftKey) {
   private applyExperienceProfile(profile: any): void {
     this.ui.applyDeviceProfile(profile);
     this.mobileControls.applyProfile(profile);
+    this.input.setDesktopDragOrbitEnabled(!profile.isMobileExperience);
     if (this.tpc) {
       this.tpc.applyFeelProfile(profile.isMobileExperience ? "mobile" : "desktop");
     }
@@ -1269,7 +1264,9 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     // Mouse look
     const { dx, dy } = this.input.consumeMouseDelta();
-    if (dx || dy) this.tpc.updateFromMouse(dx, dy);
+    if ((dx || dy) && !this.uiIsBlocking() && !this.portalCine && !this.portalUiOpen) {
+      this.tpc.updateFromMouse(dx, dy);
+    }
 
     // Auto-respawn if falling forever
     if (this.player.position.y < -55) this.warpToHub();
@@ -1458,7 +1455,14 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     const __portalCamLock = this.updatePortalCinematic(dt);
     if (!__portalCamLock) {
-      this.tpc.update(this.player.position, dt);
+      this.tpc.update(this.player.position, dt, {
+        facingYaw: this.player.facingYaw,
+        lastMoveWorld: this.player.lastMoveWorld,
+        lastNonZeroMoveYaw: this.player.lastNonZeroMoveYaw,
+        hasMeaningfulMovement: this.player.hasMeaningfulMovement,
+        moveInputForward: this.player.moveInputForward,
+        moveInputRight: this.player.moveInputRight,
+      });
     }
 
     if (this.minimapVisible) {

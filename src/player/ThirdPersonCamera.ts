@@ -1,10 +1,40 @@
 import * as THREE from "three";
 import { clamp } from "../core/clamp";
 
+const FIXED_PITCH = -0.15;
+const DESKTOP_MANUAL_ORBIT_COOLDOWN = 1.05;
+const DESKTOP_FORWARD_INTENT_THRESHOLD = 0.18;
+const DESKTOP_BACKWARD_INTENT_THRESHOLD = -0.45;
+const DESKTOP_STRAFE_ONLY_THRESHOLD = 0.3;
+const DESKTOP_YAW_FOLLOW_SHARPNESS = 0.004;
+const DESKTOP_YAW_BACKPEDAL_SHARPNESS = 0.02;
+const DESKTOP_YAW_RECENTER_SHARPNESS = 0.016;
+
+export type CameraFollowState = {
+  facingYaw: number;
+  lastMoveWorld: THREE.Vector3;
+  lastNonZeroMoveYaw: number;
+  hasMeaningfulMovement: boolean;
+  moveInputForward: number;
+  moveInputRight: number;
+};
+
+function wrapAngle(angle: number): number {
+  return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+function angleDelta(from: number, to: number): number {
+  return wrapAngle(to - from);
+}
+
+function dampFactor(sharpness: number, dt: number): number {
+  return 1 - Math.pow(sharpness, dt);
+}
+
 export class ThirdPersonCamera {
-  // Yaw/pitch controlled by mouse (pointer lock)
+  // Fixed-pitch third-person camera with optional manual orbit.
   yaw = 0;
-  pitch = -0.15; // angled down
+  pitch = FIXED_PITCH; // angled down
 
   // SWEETLAND_CAMERA_COLLISION_V3: prevent walls/terrain from blocking the player (camera push-in)
   private occluders: THREE.Object3D[] = [];
@@ -14,6 +44,13 @@ export class ThirdPersonCamera {
   private _focus = new THREE.Vector3();
   private _dir = new THREE.Vector3();
   private _tmp = new THREE.Vector3();
+  private desiredPos = new THREE.Vector3();
+  private targetYaw = 0;
+  private lastAutoFollowYaw = 0;
+  private manualOrbitCooldown = 0;
+  private desktopAutoFollowEnabled = true;
+  private feelProfile: "desktop" | "mobile" = "desktop";
+  private hasCameraState = false;
 
   setOccluders(objs: THREE.Object3D[]): void {
     this.occluders = Array.isArray(objs) ? objs : [];
@@ -33,15 +70,27 @@ export class ThirdPersonCamera {
   updateFromMouse(dx: number, dy: number): void {
     this.yaw -= dx * this.lookSensitivity;
     this.pitch -= dy * this.lookSensitivity;
-    this.pitch = clamp(this.pitch, -0.15, -0.15); // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6
+    this.pitch = clamp(this.pitch, FIXED_PITCH, FIXED_PITCH); // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6
+    this.targetYaw = this.yaw;
+
+    if (this.desktopAutoFollowEnabled && (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001)) {
+      this.manualOrbitCooldown = DESKTOP_MANUAL_ORBIT_COOLDOWN;
+    }
   }
 
   applyFeelProfile(kind: "desktop" | "mobile"): void {
+    this.feelProfile = kind;
+    this.pitch = FIXED_PITCH;
+
     if (kind === "mobile") {
       this.distance = 7.1;
       this.height = 2.7;
       this.lookSensitivity = 0.0036;
       this.followSharpness = 0.00014;
+      this.desktopAutoFollowEnabled = false;
+      this.manualOrbitCooldown = 0;
+      this.targetYaw = this.yaw;
+      this.lastAutoFollowYaw = this.yaw;
       return;
     }
 
@@ -49,9 +98,16 @@ export class ThirdPersonCamera {
     this.height = 3.0;
     this.lookSensitivity = 0.0024;
     this.followSharpness = 0.001;
+    this.desktopAutoFollowEnabled = true;
+    this.targetYaw = this.yaw;
+    this.lastAutoFollowYaw = this.yaw;
   }
 
-  update(targetWorldPos: THREE.Vector3, dt: number): void {
+  update(targetWorldPos: THREE.Vector3, dt: number, followState?: CameraFollowState): void {
+    if (this.desktopAutoFollowEnabled && this.feelProfile === "desktop" && followState) {
+      this.updateDesktopAutoFollow(dt, followState);
+    }
+
     // Camera target is slightly above player
     this.targetPos.copy(targetWorldPos).add(new THREE.Vector3(0, 1.2, 0));
 
@@ -60,11 +116,16 @@ export class ThirdPersonCamera {
     const y = Math.sin(this.pitch) * this.distance + this.height;
     const z = Math.cos(this.yaw) * Math.cos(this.pitch) * this.distance;
 
-    const desired = this.targetPos.clone().add(new THREE.Vector3(x, y, z));
+    this.desiredPos.copy(this.targetPos).add(new THREE.Vector3(x, y, z));
 
     // Smooth follow (critically damp-ish)
-    const k = 1 - Math.pow(this.followSharpness, dt);
-    this.camPos.lerp(desired, k);
+    if (!this.hasCameraState) {
+      this.camPos.copy(this.desiredPos);
+      this.hasCameraState = true;
+    } else {
+      const k = dampFactor(this.followSharpness, dt);
+      this.camPos.lerp(this.desiredPos, k);
+    }
 
     this.camera.position.copy(this.camPos);
 
@@ -107,6 +168,67 @@ export class ThirdPersonCamera {
    */
   syncFromCamera(): void {
     this.camPos.copy(this.camera.position);
+    this.hasCameraState = true;
+
+    this._tmp.subVectors(this.camera.position, this.targetPos);
+    if (this._tmp.x * this._tmp.x + this._tmp.z * this._tmp.z > 0.0001) {
+      this.yaw = Math.atan2(this._tmp.x, this._tmp.z);
+      this.targetYaw = this.yaw;
+      this.lastAutoFollowYaw = this.yaw;
+    }
   }
 
+  private updateDesktopAutoFollow(dt: number, followState: CameraFollowState): void {
+    this.manualOrbitCooldown = Math.max(0, this.manualOrbitCooldown - dt);
+
+    const followTarget = this.getDesktopFollowTarget(followState);
+    if (!followTarget) {
+      return;
+    }
+
+    this.lastAutoFollowYaw = followTarget.yaw;
+    if (this.manualOrbitCooldown > 0) {
+      return;
+    }
+
+    this.targetYaw = followTarget.yaw;
+    this.yaw = wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * dampFactor(followTarget.sharpness, dt));
+  }
+
+  private getDesktopFollowTarget(
+    followState: CameraFollowState
+  ): { yaw: number; sharpness: number } | null {
+    if (!followState.hasMeaningfulMovement) {
+      return null;
+    }
+
+    const absForward = Math.abs(followState.moveInputForward);
+    const absStrafe = Math.abs(followState.moveInputRight);
+    const strafeOnly =
+      absStrafe >= DESKTOP_STRAFE_ONLY_THRESHOLD && absForward < DESKTOP_FORWARD_INTENT_THRESHOLD;
+
+    if (strafeOnly) {
+      return null;
+    }
+
+    const desiredYaw = wrapAngle(followState.lastNonZeroMoveYaw + Math.PI);
+    const yawGap = Math.abs(angleDelta(this.yaw, desiredYaw));
+
+    if (followState.moveInputForward >= DESKTOP_FORWARD_INTENT_THRESHOLD) {
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_FOLLOW_SHARPNESS };
+    }
+
+    if (followState.moveInputForward <= DESKTOP_BACKWARD_INTENT_THRESHOLD) {
+      if (yawGap < 0.45) {
+        return { yaw: desiredYaw, sharpness: DESKTOP_YAW_BACKPEDAL_SHARPNESS };
+      }
+      return null;
+    }
+
+    if (absForward >= 0.12 || (absStrafe < 0.22 && yawGap < 0.35)) {
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
+    }
+
+    return null;
+  }
 }

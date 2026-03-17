@@ -77,6 +77,12 @@ export class Player {
   // movement info (for animation)
   private moveLen = 0;
   private running = false;
+  lastMoveWorld = new THREE.Vector3();
+  facingYaw = 0;
+  lastNonZeroMoveYaw = 0;
+  hasMeaningfulMovement = false;
+  moveInputForward = 0;
+  moveInputRight = 0;
 
   // Jump animation gating:
   private jumpAnimLock = 0;
@@ -692,6 +698,7 @@ private async loadAvatar(): Promise<void> {
 
   setRotationY(yaw: number): void {
     this.mesh.rotation.y = yaw;
+    this.facingYaw = yaw;
   }
 
   getFootOffset(): number {
@@ -738,6 +745,8 @@ private async loadAvatar(): Promise<void> {
     const moveAxes = this.input.getMoveAxes();
     const fIn = moveAxes.y;
     const rIn = moveAxes.x;
+    this.moveInputForward = fIn;
+    this.moveInputRight = rIn;
 
     // Build movement basis from camera yaw
     const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
@@ -930,6 +939,20 @@ private async loadAvatar(): Promise<void> {
 
     this.moveLen = v.length();
 
+    const actualMove = new THREE.Vector3(m.x, 0, m.z);
+    const intendedMove = new THREE.Vector3(v.x, 0, v.z);
+    const actualMoveSq = actualMove.lengthSq();
+    const intendedMoveSq = intendedMove.lengthSq();
+    const movementHeading =
+      actualMoveSq > 0.0004 ? actualMove : !onLadder && intendedMoveSq > 0.04 ? intendedMove : null;
+
+    this.hasMeaningfulMovement = movementHeading !== null;
+    if (movementHeading) {
+      movementHeading.normalize();
+      this.lastMoveWorld.copy(movementHeading);
+      this.lastNonZeroMoveYaw = Math.atan2(movementHeading.x, movementHeading.z);
+    }
+
     // Visual sync
     this.mesh.position.set(tr.x, tr.y - 0.8, tr.z);
 
@@ -941,6 +964,8 @@ private async loadAvatar(): Promise<void> {
       const yaw = Math.atan2(v.x, v.z);
       this.mesh.rotation.y = yaw;
     }
+
+    this.facingYaw = this.mesh.rotation.y;
 
     this.updateAnim(dt);
   }

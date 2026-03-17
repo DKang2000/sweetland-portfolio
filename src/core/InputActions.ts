@@ -26,12 +26,18 @@ export class InputActions {
   private portalQueued: PortfolioSectionId[] = [];
   private touchLookActive = false;
   private mouseDown = false;
+  private desktopDragOrbitEnabled = true;
+  private desktopOrbitPointerId: number | null = null;
+  private desktopOrbitLastX = 0;
+  private desktopOrbitLastY = 0;
 
   constructor(private readonly el: HTMLElement) {
     window.addEventListener("keydown", this.onKeyDown, { passive: false });
     window.addEventListener("keyup", this.onKeyUp);
-    window.addEventListener("mousedown", this.onMouseDown);
-    window.addEventListener("mouseup", this.onMouseUp);
+    this.el.addEventListener("pointerdown", this.onPointerDown);
+    window.addEventListener("pointerup", this.onPointerUp);
+    window.addEventListener("pointercancel", this.onPointerUp);
+    window.addEventListener("pointermove", this.onPointerMove, { passive: true });
     window.addEventListener("mousemove", this.onMouseMove, { passive: true });
   }
 
@@ -82,12 +88,56 @@ export class InputActions {
     this.keys.delete(e.code);
   };
 
-  private onMouseDown = (): void => {
+  private onPointerDown = (e: PointerEvent): void => {
+    if (e.pointerType !== "mouse" || e.button !== 0) {
+      return;
+    }
+
     this.mouseDown = true;
+
+    if (!this.desktopDragOrbitEnabled) {
+      return;
+    }
+
+    this.desktopOrbitPointerId = e.pointerId;
+    this.desktopOrbitLastX = e.clientX;
+    this.desktopOrbitLastY = e.clientY;
+
+    try {
+      this.el.setPointerCapture(e.pointerId);
+    } catch {
+      // ignore
+    }
   };
 
-  private onMouseUp = (): void => {
-    this.mouseDown = false;
+  private onPointerUp = (e: PointerEvent): void => {
+    if (e.pointerType === "mouse" && (e.button === 0 || e.pointerId === this.desktopOrbitPointerId)) {
+      this.mouseDown = false;
+    }
+
+    if (e.pointerId !== this.desktopOrbitPointerId) {
+      return;
+    }
+
+    this.releaseDesktopOrbitDrag();
+  };
+
+  private onPointerMove = (e: PointerEvent): void => {
+    if (e.pointerId !== this.desktopOrbitPointerId) {
+      return;
+    }
+
+    if ((e.buttons & 1) === 0) {
+      this.releaseDesktopOrbitDrag();
+      return;
+    }
+
+    const dx = e.clientX - this.desktopOrbitLastX;
+    const dy = e.clientY - this.desktopOrbitLastY;
+    this.desktopOrbitLastX = e.clientX;
+    this.desktopOrbitLastY = e.clientY;
+    this.lookDX += dx;
+    this.lookDY += dy;
   };
 
   private onMouseMove = (e: MouseEvent): void => {
@@ -159,6 +209,13 @@ export class InputActions {
 
   setTouchLookActive(active: boolean): void {
     this.touchLookActive = active;
+  }
+
+  setDesktopDragOrbitEnabled(enabled: boolean): void {
+    this.desktopDragOrbitEnabled = enabled;
+    if (!enabled) {
+      this.releaseDesktopOrbitDrag();
+    }
   }
 
   isTouchLooking(): boolean {
@@ -251,5 +308,17 @@ export class InputActions {
 
   isMouseDown(): boolean {
     return this.mouseDown;
+  }
+
+  private releaseDesktopOrbitDrag(): void {
+    if (this.desktopOrbitPointerId !== null) {
+      try {
+        this.el.releasePointerCapture(this.desktopOrbitPointerId);
+      } catch {
+        // ignore
+      }
+    }
+
+    this.desktopOrbitPointerId = null;
   }
 }
