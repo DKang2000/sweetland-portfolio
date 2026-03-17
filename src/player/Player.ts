@@ -23,6 +23,15 @@ type JumpTarget = {
 };
 
 export class Player {
+  private readonly desktopWalkSpeed = 6.0;
+  private readonly desktopRunSpeed = 9.5;
+  private readonly desktopJumpSpeed = 10.0;
+  private readonly desktopGravity = -22.0;
+  private readonly mobileWalkSpeed = 6.8;
+  private readonly mobileRunSpeed = 10.8;
+  private readonly mobileJumpSpeed = 11.2;
+  private readonly mobileGravity = -28.0;
+
   mesh = new THREE.Group();
 
   body!: any;
@@ -54,6 +63,7 @@ export class Player {
   private readonly maxJumps = 2;
   private readonly doubleJumpMultiplier = 0.9; // weaker 2nd jump
   private jumpWasDown = false;
+  private autoRunThreshold = 0.92;
 
   // Visual model + animation
   private placeholder: THREE.Object3D | null = null;
@@ -692,6 +702,23 @@ private async loadAvatar(): Promise<void> {
     // Compatibility no-op for older app patches.
   }
 
+  applyFeelProfile(kind: "desktop" | "mobile"): void {
+    if (kind === "mobile") {
+      this.walkSpeed = this.mobileWalkSpeed;
+      this.runSpeed = this.mobileRunSpeed;
+      this.jumpSpeed = this.mobileJumpSpeed;
+      this.gravity = this.mobileGravity;
+      this.autoRunThreshold = 0.7;
+      return;
+    }
+
+    this.walkSpeed = this.desktopWalkSpeed;
+    this.runSpeed = this.desktopRunSpeed;
+    this.jumpSpeed = this.desktopJumpSpeed;
+    this.gravity = this.desktopGravity;
+    this.autoRunThreshold = 0.92;
+  }
+
   setLadder(ladder: { center: THREE.Vector3; minY: number; maxY: number } | null): void {
     if (this.ladderCooldown > 0) return;
     if (!ladder) {
@@ -720,7 +747,7 @@ private async loadAvatar(): Promise<void> {
     const v = camForward.clone().multiplyScalar(fIn).add(camRight.clone().multiplyScalar(rIn));
     if (v.lengthSq() > 1) v.normalize();
 
-    this.running = this.input.isRunHeld() || (this.input.isMobileMoving() && moveAxes.strength > 0.92);
+    this.running = this.input.isRunHeld() || (this.input.isMobileMoving() && moveAxes.strength > this.autoRunThreshold);
     const speed = this.running ? this.runSpeed : this.walkSpeed;
 
     // Ladder cooldown

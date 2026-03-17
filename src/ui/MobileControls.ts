@@ -8,10 +8,11 @@ type MobileActionState = {
   visible: boolean;
 };
 
-const JOYSTICK_DEAD_ZONE = 0.14;
-const JOYSTICK_TAP_TRAVEL = 16;
-const JOYSTICK_TAP_MS = 220;
-const JOYSTICK_JUMP_COOLDOWN_MS = 260;
+const JOYSTICK_DEAD_ZONE = 0.1;
+const JOYSTICK_TAP_TRAVEL = 14;
+const JOYSTICK_TAP_MS = 180;
+const JOYSTICK_EARLY_JUMP_MS = 95;
+const JOYSTICK_JUMP_COOLDOWN_MS = 220;
 
 export class MobileControls {
   private root = qs<HTMLDivElement>("#mobileControls");
@@ -45,9 +46,11 @@ export class MobileControls {
   private joystickCenterX = 0;
   private joystickCenterY = 0;
   private joystickTapCandidate = false;
+  private joystickJumpQueued = false;
   private joystickTouchStart = 0;
   private joystickTravelMax = 0;
   private lastJumpTapAt = 0;
+  private joystickEarlyJumpTimer: number | null = null;
 
   private lookPointerId: number | null = null;
   private lookLastX = 0;
@@ -149,10 +152,24 @@ export class MobileControls {
     this.joystickCenterX = rect.left + rect.width * 0.5;
     this.joystickCenterY = rect.top + rect.height * 0.5;
     this.joystickTapCandidate = true;
+    this.joystickJumpQueued = false;
     this.joystickTouchStart = performance.now();
     this.joystickTravelMax = 0;
+    this.clearEarlyJumpTimer();
 
     this.updateJoystickFromPoint(e.clientX, e.clientY);
+    this.joystickEarlyJumpTimer = window.setTimeout(() => {
+      if (
+        this.joystickPointerId !== null &&
+        this.joystickTapCandidate &&
+        !this.joystickJumpQueued &&
+        performance.now() - this.lastJumpTapAt >= JOYSTICK_JUMP_COOLDOWN_MS
+      ) {
+        this.joystickJumpQueued = true;
+        this.lastJumpTapAt = performance.now();
+        this.input.queueJump();
+      }
+    }, JOYSTICK_EARLY_JUMP_MS);
 
     this.joystick.addEventListener("pointermove", this.onJoystickMove);
     this.joystick.addEventListener("pointerup", this.onJoystickUp);
@@ -172,11 +189,13 @@ export class MobileControls {
     const elapsed = performance.now() - this.joystickTouchStart;
     const canTriggerJump =
       this.joystickTapCandidate &&
+      !this.joystickJumpQueued &&
       elapsed <= JOYSTICK_TAP_MS &&
       this.joystickTravelMax <= JOYSTICK_TAP_TRAVEL &&
       performance.now() - this.lastJumpTapAt >= JOYSTICK_JUMP_COOLDOWN_MS;
 
     if (canTriggerJump) {
+      this.joystickJumpQueued = true;
       this.lastJumpTapAt = performance.now();
       this.input.queueJump();
     }
@@ -194,6 +213,7 @@ export class MobileControls {
     this.joystickTravelMax = Math.max(this.joystickTravelMax, distance);
     if (distance > innerTapRadius) {
       this.joystickTapCandidate = false;
+      this.clearEarlyJumpTimer();
     }
 
     let normX = 0;
@@ -230,12 +250,21 @@ export class MobileControls {
 
     this.joystickPointerId = null;
     this.joystickTapCandidate = false;
+    this.joystickJumpQueued = false;
+    this.clearEarlyJumpTimer();
     this.input.clearMobileMove();
     this.joystickKnob.style.transform = "translate(0px, 0px)";
     this.joystick.classList.remove("is-active");
     this.joystick.removeEventListener("pointermove", this.onJoystickMove);
     this.joystick.removeEventListener("pointerup", this.onJoystickUp);
     this.joystick.removeEventListener("pointercancel", this.onJoystickUp);
+  }
+
+  private clearEarlyJumpTimer(): void {
+    if (this.joystickEarlyJumpTimer !== null) {
+      window.clearTimeout(this.joystickEarlyJumpTimer);
+      this.joystickEarlyJumpTimer = null;
+    }
   }
 
   private onLookDown = (e: PointerEvent): void => {
@@ -262,7 +291,7 @@ export class MobileControls {
     const dy = e.clientY - this.lookLastY;
     this.lookLastX = e.clientX;
     this.lookLastY = e.clientY;
-    this.input.addLookDelta(dx * 0.9, dy * 0.45);
+    this.input.addLookDelta(dx * 1.3, dy * 0.72);
   };
 
   private onLookUp = (e: PointerEvent): void => {

@@ -21,6 +21,8 @@ export class ThirdPersonCamera {
   // A bit farther out for better platforming visibility
   distance = 8.2;
   height = 3.0;
+  lookSensitivity = 0.0024;
+  followSharpness = 0.001;
 
   // Smoothed camera position
   private camPos = new THREE.Vector3();
@@ -29,10 +31,24 @@ export class ThirdPersonCamera {
   constructor(private camera: THREE.PerspectiveCamera) {}
 
   updateFromMouse(dx: number, dy: number): void {
-    const sens = 0.0024;
-    this.yaw -= dx * sens;
-    this.pitch -= dy * sens;
+    this.yaw -= dx * this.lookSensitivity;
+    this.pitch -= dy * this.lookSensitivity;
     this.pitch = clamp(this.pitch, -0.15, -0.15); // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6 // SWEETLAND_LOCK_PITCH_V6
+  }
+
+  applyFeelProfile(kind: "desktop" | "mobile"): void {
+    if (kind === "mobile") {
+      this.distance = 7.1;
+      this.height = 2.7;
+      this.lookSensitivity = 0.0036;
+      this.followSharpness = 0.00014;
+      return;
+    }
+
+    this.distance = 8.2;
+    this.height = 3.0;
+    this.lookSensitivity = 0.0024;
+    this.followSharpness = 0.001;
   }
 
   update(targetWorldPos: THREE.Vector3, dt: number): void {
@@ -47,7 +63,7 @@ export class ThirdPersonCamera {
     const desired = this.targetPos.clone().add(new THREE.Vector3(x, y, z));
 
     // Smooth follow (critically damp-ish)
-    const k = 1 - Math.pow(0.001, dt);
+    const k = 1 - Math.pow(this.followSharpness, dt);
     this.camPos.lerp(desired, k);
 
     this.camera.position.copy(this.camPos);

@@ -875,6 +875,7 @@ export class App {
     // Player
     this.player = new Player(this.physics, this.input);
     await this.player.spawn(this.level.spawn);
+    this.player.applyFeelProfile(this.device.current.isMobileExperience ? "mobile" : "desktop");
 
     // --- Player/NPC swap (Option A3): Nutty Knight as player, Sweetie 01 as NPC ---
 // Sweetie_01 should exist as a normal NPC at the exact pose you captured.
@@ -895,6 +896,7 @@ this.scene.add(this.player.mesh);
     this.applyQualityProfile();
 
     this.tpc = new ThirdPersonCamera(this.camera);
+    this.tpc.applyFeelProfile(this.device.current.isMobileExperience ? "mobile" : "desktop");
 
     // SWEETLAND_PORTAL_CINEMATIC_V1
     // When the portfolio panel closes, resume gameplay camera smoothly (no snapping).
@@ -1071,8 +1073,10 @@ if (e.code === "KeyK" && e.shiftKey) {
     this.ui.applyDeviceProfile(profile);
     this.mobileControls.applyProfile(profile);
     if (this.tpc) {
-      this.tpc.distance = profile.isMobileExperience ? 7.4 : 8.2;
-      this.tpc.height = profile.isMobileExperience ? 2.8 : 3.0;
+      this.tpc.applyFeelProfile(profile.isMobileExperience ? "mobile" : "desktop");
+    }
+    if (this.player) {
+      this.player.applyFeelProfile(profile.isMobileExperience ? "mobile" : "desktop");
     }
 
     if (!this.minimapPreferenceLocked && profile.isMobileExperience && profile.useCompactMinimap) {
@@ -1084,7 +1088,7 @@ if (e.code === "KeyK" && e.shiftKey) {
     if (!this.qualityPreferenceLocked && !this.autoLowFxTriggered) {
       this.lowFxEnabled = profile.useLowFx;
     }
-    this.minimapRenderInterval = profile.isMobileExperience ? 3 : 1;
+    this.minimapRenderInterval = profile.isMobileExperience ? 5 : 1;
     this.applyQualityProfile();
     this.mobileControls.setMutedState(this.musicMuted);
     this.mobileControls.setLowFxState(this.lowFxEnabled);
@@ -1094,17 +1098,23 @@ if (e.code === "KeyK" && e.shiftKey) {
 
   private applyQualityProfile(): void {
     const profile = this.device.current;
-    const dprClamp = this.lowFxEnabled ? 1.1 : profile.isMobileExperience ? 1.25 : 2;
+    const dprClamp = this.lowFxEnabled ? 0.9 : profile.isMobileExperience ? 1.0 : 2;
     this.renderer.setPixelRatio(Math.min(profile.pixelRatio, dprClamp));
-    this.renderer.shadowMap.enabled = true;
+    const allowShadows = !(profile.isMobileExperience && this.lowFxEnabled);
+    this.renderer.shadowMap.enabled = allowShadows;
     this.renderer.shadowMap.type = this.lowFxEnabled ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
 
     if (this.sunLight) {
-      const mapSize = this.lowFxEnabled ? 1024 : 2048;
-      this.sunLight.castShadow = true;
+      const mapSize = this.lowFxEnabled ? 768 : 2048;
+      this.sunLight.castShadow = allowShadows;
       this.sunLight.shadow.mapSize.set(mapSize, mapSize);
       this.sunLight.shadow.bias = this.lowFxEnabled ? -0.0008 : -0.0005;
       this.sunLight.shadow.needsUpdate = true;
+    }
+
+    const clouds = this.scene.getObjectByName("clouds");
+    if (clouds) {
+      clouds.visible = !(profile.isMobileExperience && this.lowFxEnabled);
     }
   }
 
@@ -1139,9 +1149,9 @@ if (e.code === "KeyK" && e.shiftKey) {
   }
 
   private setupRenderer(): void {
-    this.renderer.setPixelRatio(Math.min(this.device.current.pixelRatio, this.lowFxEnabled ? 1.1 : 2));
+    this.renderer.setPixelRatio(Math.min(this.device.current.pixelRatio, this.lowFxEnabled ? 0.9 : 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = !this.lowFxEnabled;
     this.renderer.shadowMap.type = this.lowFxEnabled ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2443,7 +2453,7 @@ private render(): void {
       phase: "enter",
       id,
       t: 0,
-      dur: 0.65,
+      dur: this.device.current.isMobileExperience ? 0.42 : 0.58,
       fromPos: this.camera.position.clone(),
       fromQuat: this.camera.quaternion.clone(),
       fromFov: this.camera.fov,
