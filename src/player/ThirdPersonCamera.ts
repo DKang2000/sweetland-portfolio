@@ -69,8 +69,8 @@ export class ThirdPersonCamera {
   constructor(private camera: THREE.PerspectiveCamera) {}
 
   getMovementYaw(): number {
-    if (this.desktopAutoFollowEnabled && this.feelProfile === "desktop" && this.manualOrbitCooldown <= 0) {
-      return wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * 0.75);
+    if (this.desktopAutoFollowEnabled && this.feelProfile === "desktop") {
+      return wrapAngle(this.targetYaw + Math.PI);
     }
 
     return this.yaw;
