@@ -1,12 +1,10 @@
 import { detectDeviceProfile } from "./core/DeviceProfile";
 import {
-  persistMobileExperienceMode,
   resolveMobileExperienceMode,
   shouldUseMobileFrontDoor,
-  type ResolvedMobileMode,
 } from "./mobile/MobileMode";
+import { renderMobileRedirect } from "./mobile/MobileRedirect";
 import { renderWebGLFallback } from "./ui/WebGLFallback";
-import type { App } from "./app/App";
 
 function canUseWebGL(): boolean {
   try {
@@ -39,9 +37,11 @@ if (profile.isMobileExperience) {
   installTouchViewportLock();
 }
 
-if (!canUseWebGL()) {
+if (shouldUseMobileFrontDoor(profile, resolvedMobileMode)) {
+  renderMobileRedirect();
+} else if (!canUseWebGL()) {
   renderWebGLFallback({
-    message: "This browser couldn’t start Candy Castle’s 3D renderer, but Chloe’s guided Sweet Land tour is still ready.",
+    message: "This browser couldn’t start Candy Castle’s 3D renderer, but Chloe’s portals are still ready from here.",
     profile,
     resolvedMobileMode,
   });
@@ -49,14 +49,13 @@ if (!canUseWebGL()) {
   const bootRuntime = () => {
     import("./bootstrapGame")
       .then(async ({ startGame }) => {
-        const app = await startGame(resolvedMobileMode.mode);
-        await maybeInstallMobileFrontDoor(app, profile, resolvedMobileMode);
+        await startGame(resolvedMobileMode.mode);
       })
       .catch((err) => {
         console.error(err);
         renderWebGLFallback({
           message: profile.isMobileExperience
-            ? "Candy Castle ran into a startup issue on this phone, but Chloe’s guided Sweet Land tour is still here for you."
+            ? "Candy Castle ran into a startup issue on this phone, but Chloe’s portals are still here for you."
             : "Candy Castle ran into a startup issue, but Chloe’s portals are still here for you.",
           profile,
           resolvedMobileMode,
@@ -69,75 +68,4 @@ if (!canUseWebGL()) {
   } else {
     setTimeout(bootRuntime, 0);
   }
-}
-
-async function maybeInstallMobileFrontDoor(
-  app: App,
-  profile: ReturnType<typeof detectDeviceProfile>,
-  resolved: ResolvedMobileMode
-): Promise<void> {
-  if (!shouldUseMobileFrontDoor(profile, resolved) || !resolved.mode) {
-    return;
-  }
-
-  const root = document.getElementById("mobileFrontDoor");
-  if (!root) return;
-
-  const [{ MobileLanding }, { GuidedTour }] = await Promise.all([
-    import("./mobile/MobileLanding"),
-    import("./mobile/GuidedTour"),
-  ]);
-
-  const startExplore = (): void => {
-    persistMobileExperienceMode("explore");
-    tour.hide();
-    landing.hide();
-    app.resumeMobileExplore();
-  };
-
-  const startGuided = (): void => {
-    persistMobileExperienceMode("guided");
-    landing.hide();
-    app.setMobileInteractionMode("guided");
-    tour.start();
-  };
-
-  const requestExplore = (): void => {
-    app.setMobileInteractionMode("guided");
-    tour.hide();
-    landing.resumeExploreChoice(true);
-  };
-
-  const landing = new MobileLanding(root, {
-    onQuickTour: startGuided,
-    onExploreMode: startExplore,
-  });
-
-  const tour = new GuidedTour(root, {
-    onFocusSection: (sectionId) => app.focusPortalStop(sectionId),
-    onOpenSection: (sectionId) => app.openMobileSection(sectionId),
-    onExploreMode: requestExplore,
-  });
-
-  app.dismissLoadingOverlay();
-
-  if (resolved.source === "default") {
-    app.setMobileInteractionMode("guided");
-    landing.showEntry(null, true);
-    return;
-  }
-
-  if (resolved.mode === "guided") {
-    startGuided();
-    return;
-  }
-
-  if (isPortraitMobile()) {
-    app.setMobileInteractionMode("guided");
-  }
-  landing.resumeExploreChoice(true);
-}
-
-function isPortraitMobile(): boolean {
-  return window.innerHeight >= window.innerWidth;
 }

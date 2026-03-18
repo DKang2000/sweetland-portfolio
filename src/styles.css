@@ -173,6 +173,13 @@ button, a{ touch-action:manipulation; }
   transition: transform .08s ease, box-shadow .12s ease, background .12s ease;
 }
 
+.mobile-front-anchor{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-decoration:none;
+}
+
 .mobile-front-primary,
 .guided-tour-primary{
   background: linear-gradient(180deg, rgba(255,225,242,0.98), rgba(255,141,198,0.92));
@@ -310,6 +317,17 @@ button, a{ touch-action:manipulation; }
 
 .guided-tour-actions-stacked{
   margin-top: 22px;
+}
+
+.mobile-redirect-card{
+  width:min(100%, 430px);
+  padding: 30px 22px 22px;
+  border-radius: 32px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.04)),
+    linear-gradient(180deg, rgba(26,19,37,0.94), rgba(12,14,24,0.96));
+  box-shadow: 0 30px 80px rgba(0,0,0,0.42);
 }
 
 body[data-mobile-mode="guided"] #hud,
@@ -975,6 +993,13 @@ body.mobile-experience:not(.ui-portrait) #minimapWrap{
 .fallback-shell-mobile{
   align-items:flex-start;
   justify-content:center;
+}
+
+.fallback-shell-mobile-redirect{
+  background:
+    radial-gradient(circle at top, rgba(255,186,225,0.34), rgba(255,186,225,0) 30%),
+    radial-gradient(circle at 18% 22%, rgba(255,247,193,0.16), rgba(255,247,193,0) 22%),
+    linear-gradient(180deg, #101722 0%, #090d13 100%);
 }
 
 .fallback-card-mobile{

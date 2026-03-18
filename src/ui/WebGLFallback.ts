@@ -1,7 +1,6 @@
 import type { DeviceProfile } from "../core/DeviceProfile";
 import { PORTFOLIO_SECTIONS } from "../config/portfolio";
-import { GuidedTour } from "../mobile/GuidedTour";
-import { MobileLanding } from "../mobile/MobileLanding";
+import { renderMobileRedirect } from "../mobile/MobileRedirect";
 import { shouldUseMobileFrontDoor, type ResolvedMobileMode } from "../mobile/MobileMode";
 
 type WebGLFallbackOptions = {
@@ -17,19 +16,17 @@ function normalizeOptions(input?: string | WebGLFallbackOptions): WebGLFallbackO
   return input ?? {};
 }
 
-function openSection(sectionId: string): void {
-  const section = PORTFOLIO_SECTIONS.find((item) => item.id === sectionId);
-  if (!section) return;
-  window.open(section.url, "_blank", "noopener,noreferrer");
-}
-
 export function renderWebGLFallback(input?: string | WebGLFallbackOptions): void {
   const { message, profile, resolvedMobileMode } = normalizeOptions(input);
   const app = document.getElementById("app");
   if (!app) return;
 
   if (profile && resolvedMobileMode && shouldUseMobileFrontDoor(profile, resolvedMobileMode)) {
-    renderMobileFallback(app, message, resolvedMobileMode);
+    renderMobileRedirect({
+      message:
+        message ?? "Please visit imchloekang.com on a mobile site for the best experience.",
+      ctaLabel: "Open Chloeverse Mobile",
+    });
     return;
   }
 
@@ -58,49 +55,4 @@ export function renderWebGLFallback(input?: string | WebGLFallbackOptions): void
       </div>
     </div>
   `;
-}
-
-function renderMobileFallback(
-  app: HTMLElement,
-  message: string | undefined,
-  resolvedMobileMode: ResolvedMobileMode
-): void {
-  app.innerHTML = `
-    <div class="fallback-shell fallback-shell-mobile">
-      <div class="fallback-card fallback-card-mobile">
-        <div class="fallback-kicker">Chloeverse</div>
-        <h1>Sweet Land is ready for the Quick Tour</h1>
-        <p class="fallback-copy">
-          ${message ?? "This phone can still take the storybook path through all four Candy Castle portals, even without the live 3D scene."}
-        </p>
-      </div>
-      <div id="mobileFrontDoor" class="mobile-front-door hidden" aria-live="polite"></div>
-    </div>
-  `;
-
-  const root = app.querySelector<HTMLElement>("#mobileFrontDoor");
-  if (!root) return;
-
-  const landing = new MobileLanding(root, {
-    onQuickTour: () => tour.start(),
-    onExploreMode: () => landing.resumeExploreChoice(false),
-  });
-
-  const tour = new GuidedTour(root, {
-    onOpenSection: (sectionId) => openSection(sectionId),
-    onExploreMode: () => {
-      tour.hide();
-      landing.resumeExploreChoice(false);
-    },
-  });
-
-  if (resolvedMobileMode.mode === "guided" && resolvedMobileMode.source !== "default") {
-    tour.start();
-    return;
-  }
-
-  landing.showEntry(
-    resolvedMobileMode.source === "default" ? null : resolvedMobileMode.mode,
-    false
-  );
 }

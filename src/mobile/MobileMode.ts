@@ -64,7 +64,7 @@ export function persistMobileExperienceMode(mode: MobileExperienceMode): void {
 
 export function shouldUseMobileFrontDoor(
   profile: DeviceProfile,
-  resolved: ResolvedMobileMode
+  _resolved: ResolvedMobileMode
 ): boolean {
-  return profile.isMobileExperience && !profile.forceDesktop && (profile.isPhoneLike || resolved.mode === "guided");
+  return profile.isMobileExperience && !profile.forceDesktop;
 }
