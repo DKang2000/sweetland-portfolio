@@ -31,12 +31,15 @@ export class UI {
   private loadingTitle = qs<HTMLDivElement>("#loadingTitle");
   private loadingSub = qs<HTMLDivElement>("#loadingSub");
   private loadingProgress = qs<HTMLDivElement>("#loadingProgress");
+  private helpToggle = qs<HTMLButtonElement>("#helpToggle");
+  private helpPanel = qs<HTMLDivElement>("#helpPanel");
   private helpText = qs<HTMLDivElement>("#helpText");
   private resetCoinsBtn = qs<HTMLButtonElement>("#resetCoinsBtn");
 
   private _coins = 0;
   private isMobileExperience = false;
   private isPortrait = false;
+  private desktopHelpOpen = false;
 
   // Dialogue
   private lines: string[] = [];
@@ -64,12 +67,26 @@ export class UI {
     this.dialogueBody.addEventListener("click", () => this.nextLine());
     // Hint the actual keybinding.
     this.dialogueClose.textContent = "Escape";
+    this.helpToggle.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.setDesktopHelpOpen(!this.desktopHelpOpen);
+    });
+    this.helpPanel.addEventListener("pointerdown", (e) => e.stopPropagation());
     this.promptCard.addEventListener("click", () => this.onPromptAction?.());
     this.promptCard.addEventListener("pointerdown", (e) => e.stopPropagation());
+
+    window.addEventListener("pointerdown", (e) => {
+      if (this.isMobileExperience || !this.desktopHelpOpen) return;
+      const target = e.target;
+      if (!(target instanceof Node)) return;
+      if (this.helpToggle.contains(target) || this.helpPanel.contains(target)) return;
+      this.setDesktopHelpOpen(false);
+    });
 
     // Keyboard: Esc closes panel/dialogue
     window.addEventListener("keydown", (e) => {
       if (e.code === "Escape") {
+        if (this.desktopHelpOpen) this.setDesktopHelpOpen(false);
         if (!this.panelEl.classList.contains("hidden")) this.closePanel();
         if (!this.dialogueEl.classList.contains("hidden")) this.closeDialogue();
       }
@@ -86,8 +103,11 @@ export class UI {
     this.promptCard.disabled = !profile.isMobileExperience;
     this.loadingCard.dataset.mode = profile.isMobileExperience ? "mobile" : "desktop";
     this.resetCoinsBtn.textContent = profile.isMobileExperience ? "Reset" : "Reset Collectibles";
+    setHidden(this.helpText, !profile.isMobileExperience);
+    setHidden(this.helpToggle, profile.isMobileExperience);
 
     if (profile.isMobileExperience) {
+      this.setDesktopHelpOpen(false);
       this.loadingTitle.textContent = "Tap to Enter Sweet Land";
       this.loadingSub.innerHTML = profile.isPortrait
         ? "Rotate sideways for the full mobile game layout.<br>Landscape gives you the full control deck, auto-follow camera, and room to explore the castle like a handheld game."
@@ -99,13 +119,13 @@ export class UI {
       this.panelEmbedNote.textContent = "Open the page for the full portal destination.";
     } else {
       this.loadingTitle.textContent = "Welcome to the Chloeverse!";
-      this.loadingSub.innerHTML =
-        'Click anywhere to start<br><span class="kbd">WASD</span> moves, mouse drag optionally adjusts the camera, and the camera follows you automatically<br><span class="kbd">Esc</span> closes overlays';
-      this.helpText.innerHTML =
-        '<span class="kbd">WASD</span> move · <span class="kbd">Shift</span> run · <span class="kbd">Space</span> jump (double) · <span class="kbd">Mouse drag</span> optional camera · camera auto-follows · <span class="kbd">E</span> interact · <span class="kbd">1–4</span> portals · <span id="musicHint"><span class="kbd">M</span> mute</span> · <span class="kbd">Esc</span> close';
+      this.loadingSub.textContent = "Click anywhere to start";
+      this.helpText.innerHTML = "";
       this.promptHintEl.innerHTML = '<span class="kbd">E</span> interact';
       this.panelEmbedNote.textContent = "If the preview is blocked, open the page in a new tab.";
     }
+
+    this.setDesktopHelpOpen(!profile.isMobileExperience && this.desktopHelpOpen);
   }
 
   setCoins(n: number): void {
@@ -239,5 +259,11 @@ export class UI {
     }
     this.panelIframe.onload = null;
     this.panelIframe.onerror = null;
+  }
+
+  private setDesktopHelpOpen(open: boolean): void {
+    this.desktopHelpOpen = !this.isMobileExperience && open;
+    this.helpToggle.setAttribute("aria-expanded", String(this.desktopHelpOpen));
+    setHidden(this.helpPanel, this.isMobileExperience || !this.desktopHelpOpen);
   }
 }
