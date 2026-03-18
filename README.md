@@ -11,6 +11,20 @@ This project is not a generic Three.js starter anymore. The live site is a game-
 - use four portals that route into the broader Chloeverse (`Projects`, `Collabs`, `Work`, and `Contact`)
 - see an always-on HUD with controls, loading progress, and collectible count
 
+## Mobile Experience
+
+Mobile now has two intentional modes at the same URL:
+
+- `Quick Tour`: the default phone-like mobile path, built as a portrait-first guided Sweet Land journey
+- `Explore Mode`: the original free-roam mobile 3D castle with joystick/action controls
+
+The content, world, and portal destinations stay the same in both modes. The difference is interaction style:
+
+- desktop = control the body
+- mobile = control the journey first
+
+On phone-like mobile profiles, users first enter through the branded `Enter Sweet Land` shell. Quick Tour walks through the same four portal destinations defined in [`src/config/portfolio.ts`](/Users/donghokang/candy%20castle/sweetland-portfolio/src/config/portfolio.ts), awards candy stamps, and opens the live destination pages directly. Explore Mode remains available for the full handheld-style castle roam.
+
 ## Live Experience
 
 The production site is designed as an explorable "hub world" rather than a flat landing page.
@@ -47,6 +61,9 @@ Key files:
 
 - `src/app/App.ts`: main game/app bootstrap
 - `src/config/portfolio.ts`: portal destinations and labels
+- `src/mobile/MobileMode.ts`: mobile guided vs explore resolution + persistence
+- `src/mobile/MobileLanding.ts`: mobile entry shell and Explore Mode interstitial
+- `src/mobile/GuidedTour.ts`: guided mobile tour flow and candy stamp UI
 - `src/world/Level.ts`: world composition
 - `src/player/`: player controller + camera behavior
 - `src/ui/UI.ts`: HUD, prompts, panel, and dialogue UI

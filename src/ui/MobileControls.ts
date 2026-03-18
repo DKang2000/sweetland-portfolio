@@ -42,6 +42,8 @@ export class MobileControls {
   onPortalShortcut: ((section: PortfolioSectionId) => void) | null = null;
 
   private enabled = false;
+  private suppressed = false;
+  private lastProfile: DeviceProfile | null = null;
   private joystickPointerId: number | null = null;
   private joystickCenterX = 0;
   private joystickCenterY = 0;
@@ -96,9 +98,15 @@ export class MobileControls {
   }
 
   applyProfile(profile: DeviceProfile): void {
+    this.lastProfile = profile;
     this.root.dataset.orientation = profile.isPortrait ? "portrait" : "landscape";
     this.root.dataset.compact = profile.isPortrait ? "1" : "0";
-    this.setEnabled(profile.isMobileExperience);
+    this.syncEnabled();
+  }
+
+  setSuppressed(suppressed: boolean): void {
+    this.suppressed = suppressed;
+    this.syncEnabled();
   }
 
   setActionState(state: MobileActionState): void {
@@ -139,6 +147,11 @@ export class MobileControls {
 
   private toggleDrawer(): void {
     this.setDrawerOpen(!this.isDrawerOpen());
+  }
+
+  private syncEnabled(): void {
+    const profile = this.lastProfile;
+    this.setEnabled(!!profile?.isMobileExperience && !this.suppressed);
   }
 
   private onJoystickDown = (e: PointerEvent): void => {

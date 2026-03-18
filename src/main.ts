@@ -1,5 +1,12 @@
 import { detectDeviceProfile } from "./core/DeviceProfile";
+import {
+  persistMobileExperienceMode,
+  resolveMobileExperienceMode,
+  shouldUseMobileFrontDoor,
+  type ResolvedMobileMode,
+} from "./mobile/MobileMode";
 import { renderWebGLFallback } from "./ui/WebGLFallback";
+import type { App } from "./app/App";
 
 function canUseWebGL(): boolean {
   try {
@@ -27,29 +34,110 @@ function installTouchViewportLock(): void {
 }
 
 const profile = detectDeviceProfile();
+const resolvedMobileMode = resolveMobileExperienceMode(profile);
 if (profile.isMobileExperience) {
   installTouchViewportLock();
 }
 
 if (!canUseWebGL()) {
-  renderWebGLFallback("This browser couldn’t start Candy Castle’s 3D renderer, so here are Chloe’s portal destinations instead.");
+  renderWebGLFallback({
+    message: "This browser couldn’t start Candy Castle’s 3D renderer, but Chloe’s guided Sweet Land tour is still ready.",
+    profile,
+    resolvedMobileMode,
+  });
 } else {
   const bootRuntime = () => {
     import("./bootstrapGame")
-      .then(({ startGame }) => startGame(profile))
+      .then(async ({ startGame }) => {
+        const app = await startGame(resolvedMobileMode.mode);
+        await maybeInstallMobileFrontDoor(app, profile, resolvedMobileMode);
+      })
       .catch((err) => {
         console.error(err);
-        renderWebGLFallback(
-          profile.isMobileExperience
-            ? "Candy Castle ran into a startup issue on this phone, but Chloe’s portals are still here for you."
-            : "Candy Castle ran into a startup issue, but Chloe’s portals are still here for you."
-        );
+        renderWebGLFallback({
+          message: profile.isMobileExperience
+            ? "Candy Castle ran into a startup issue on this phone, but Chloe’s guided Sweet Land tour is still here for you."
+            : "Candy Castle ran into a startup issue, but Chloe’s portals are still here for you.",
+          profile,
+          resolvedMobileMode,
+        });
       });
   };
 
   if ("requestAnimationFrame" in window) {
     window.requestAnimationFrame(() => bootRuntime());
   } else {
-    window.setTimeout(bootRuntime, 0);
+    setTimeout(bootRuntime, 0);
   }
+}
+
+async function maybeInstallMobileFrontDoor(
+  app: App,
+  profile: ReturnType<typeof detectDeviceProfile>,
+  resolved: ResolvedMobileMode
+): Promise<void> {
+  if (!shouldUseMobileFrontDoor(profile, resolved) || !resolved.mode) {
+    return;
+  }
+
+  const root = document.getElementById("mobileFrontDoor");
+  if (!root) return;
+
+  const [{ MobileLanding }, { GuidedTour }] = await Promise.all([
+    import("./mobile/MobileLanding"),
+    import("./mobile/GuidedTour"),
+  ]);
+
+  const startExplore = (): void => {
+    persistMobileExperienceMode("explore");
+    tour.hide();
+    landing.hide();
+    app.resumeMobileExplore();
+  };
+
+  const startGuided = (): void => {
+    persistMobileExperienceMode("guided");
+    landing.hide();
+    app.setMobileInteractionMode("guided");
+    tour.start();
+  };
+
+  const requestExplore = (): void => {
+    app.setMobileInteractionMode("guided");
+    tour.hide();
+    landing.resumeExploreChoice(true);
+  };
+
+  const landing = new MobileLanding(root, {
+    onQuickTour: startGuided,
+    onExploreMode: startExplore,
+  });
+
+  const tour = new GuidedTour(root, {
+    onFocusSection: (sectionId) => app.focusPortalStop(sectionId),
+    onOpenSection: (sectionId) => app.openMobileSection(sectionId),
+    onExploreMode: requestExplore,
+  });
+
+  app.dismissLoadingOverlay();
+
+  if (resolved.source === "default") {
+    app.setMobileInteractionMode("guided");
+    landing.showEntry(null, true);
+    return;
+  }
+
+  if (resolved.mode === "guided") {
+    startGuided();
+    return;
+  }
+
+  if (isPortraitMobile()) {
+    app.setMobileInteractionMode("guided");
+  }
+  landing.resumeExploreChoice(true);
+}
+
+function isPortraitMobile(): boolean {
+  return window.innerHeight >= window.innerWidth;
 }

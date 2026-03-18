@@ -11,6 +11,7 @@ import { MobileControls } from "../ui/MobileControls";
 import { AudioManager } from "../audio/AudioManager";
 import { PORTFOLIO_SECTIONS } from "../config/portfolio";
 import type { PortfolioSectionId } from "../config/portfolio";
+import type { MobileExperienceMode } from "../mobile/MobileMode";
 
 // __SL_NPC_DIALOGUE_OVERRIDES_V8D (generated patch: UI-name keyed NPC dialogue + display-name overrides)
 function __slNormNameV8d(s: any): string {
@@ -265,6 +266,13 @@ type Focus =
   | { kind: "portal"; id: PortfolioSectionId }
   | { kind: "npc"; id: string }
   | null;
+
+type GuidedPortalView = {
+  id: PortfolioSectionId;
+  toPos: THREE.Vector3;
+  toQuat: THREE.Quaternion;
+  toFov: number;
+};
 
 
 // SWEETLAND_NPC_DIALOGUE_V2
@@ -730,6 +738,7 @@ export class App {
   private qualityPreferenceLocked = false;
   private minimapPreferenceLocked = false;
   private autoLowFxTriggered = false;
+  private mobileInteractionMode: MobileExperienceMode = "explore";
   private frameTimeAvg = 1 / 60;
   private poorFrameTimeWindow = 0;
   private readonly lowFxStorageKey = "sweetland:pref:lowFx";
@@ -776,6 +785,20 @@ export class App {
   // SWEETLAND_PORTAL_CINEMATIC_V1B_RESTORE
   // Remember the normal gameplay FOV so we can restore after portal preview.
   private portalGameplayFov: number | null = null;
+  private guidedPortalView: GuidedPortalView | null = null;
+  private guidedPortalCine:
+    | null
+    | {
+        id: PortfolioSectionId;
+        t: number;
+        dur: number;
+        fromPos: THREE.Vector3;
+        fromQuat: THREE.Quaternion;
+        fromFov: number;
+        toPos: THREE.Vector3;
+        toQuat: THREE.Quaternion;
+        toFov: number;
+      } = null;
 
 
   // NPC placement mode (Option A2)
@@ -835,6 +858,45 @@ export class App {
   private fixedDt = 1 / 60;
 
   private coins = 0;
+
+  constructor(initialMobileMode: MobileExperienceMode | null = null) {
+    if (initialMobileMode) {
+      this.mobileInteractionMode = initialMobileMode;
+    }
+  }
+
+  setMobileInteractionMode(mode: MobileExperienceMode): void {
+    this.mobileInteractionMode = mode;
+    this.syncMobileInteractionMode();
+  }
+
+  focusPortalStop(id: PortfolioSectionId): void {
+    this.setMobileInteractionMode("guided");
+    this.closeBlockingUi();
+    this.guidedPortalView = null;
+    this.teleportToSection(id);
+    this.startGuidedPortalView(id);
+  }
+
+  openMobileSection(id: PortfolioSectionId): void {
+    const section = PORTFOLIO_SECTIONS.find((item) => item.id === id);
+    if (!section) return;
+    window.open(section.url, "_blank", "noopener,noreferrer");
+  }
+
+  resumeMobileExplore(): void {
+    this.setMobileInteractionMode("explore");
+    this.closeBlockingUi();
+    this.guidedPortalCine = null;
+    this.guidedPortalView = null;
+    this.focus = null;
+    this.ui.showPrompt(null);
+    this.tpc?.snapBehind(this.player.position, this.player.facingYaw);
+  }
+
+  dismissLoadingOverlay(): void {
+    this.ui.setLoading(false);
+  }
 
   async init(): Promise<void> {
     this.bootstrapUserPreferences();
@@ -1060,6 +1122,7 @@ if (e.code === "KeyK" && e.shiftKey) {
       }
     } catch {}
 
+    this.syncMobileInteractionMode();
     requestAnimationFrame((t) => this.frame(t));
   }
 
@@ -1089,6 +1152,35 @@ if (e.code === "KeyK" && e.shiftKey) {
     this.mobileControls.setLowFxState(this.lowFxEnabled);
     this.mobileControls.setMinimapExpanded(this.minimapVisible);
     document.body.classList.toggle("minimap-hidden", !this.minimapVisible);
+    this.syncMobileInteractionMode();
+  }
+
+  private syncMobileInteractionMode(): void {
+    const guidedActive = this.isMobileGuidedActive();
+    this.mobileControls.setSuppressed(guidedActive);
+    document.body.dataset.mobileMode = guidedActive ? "guided" : "explore";
+
+    if (guidedActive) {
+      this.focus = null;
+      this.ui.showPrompt(null);
+    } else if (!this.device.current.isMobileExperience) {
+      this.mobileInteractionMode = "explore";
+      this.guidedPortalCine = null;
+      this.guidedPortalView = null;
+    }
+  }
+
+  private isMobileGuidedActive(): boolean {
+    return this.device.current.isMobileExperience && this.mobileInteractionMode === "guided";
+  }
+
+  private closeBlockingUi(): void {
+    if (this.ui.isPanelOpen()) {
+      this.ui.closePanel();
+    }
+    if (this.ui.isDialogueOpen()) {
+      this.ui.closeDialogue();
+    }
   }
 
   private applyQualityProfile(): void {
@@ -1264,7 +1356,7 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     // Mouse look
     const { dx, dy } = this.input.consumeMouseDelta();
-    if ((dx || dy) && !this.uiIsBlocking() && !this.portalCine && !this.portalUiOpen) {
+    if ((dx || dy) && !this.uiIsBlocking() && !this.portalCine && !this.portalUiOpen && !this.isMobileGuidedActive()) {
       this.tpc.updateFromMouse(dx, dy);
     }
 
@@ -1361,7 +1453,7 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     let portalShortcut = this.input.consumePortalShortcutRequested();
     while (portalShortcut) {
-      if (!this.uiIsBlocking() && !this.portalCine) {
+      if (!this.uiIsBlocking() && !this.portalCine && !this.isMobileGuidedActive()) {
         this.teleportToSection(portalShortcut);
       }
       portalShortcut = this.input.consumePortalShortcutRequested();
@@ -1377,9 +1469,10 @@ if (e.code === "KeyK" && e.shiftKey) {
     const ladder = this.level.getLadderAt(this.player.position);
     this.player.setLadder(ladder);
     this.processQueuedActions();
-    this.mobileControls.setGameplayBlocked(this.uiIsBlocking() || !!this.portalCine || this.portalUiOpen);
+    const guidedLock = this.isMobileGuidedActive() || !!this.guidedPortalCine || !!this.guidedPortalView;
+    this.mobileControls.setGameplayBlocked(this.uiIsBlocking() || !!this.portalCine || this.portalUiOpen || guidedLock);
 
-    const __portalLock = !!this.portalCine || this.portalUiOpen;
+    const __portalLock = !!this.portalCine || this.portalUiOpen || guidedLock;
     if (!__portalLock) {
       this.player.update(dt, this.tpc.yaw);
     } else {
@@ -1454,7 +1547,8 @@ if (e.code === "KeyK" && e.shiftKey) {
 
 
     const __portalCamLock = this.updatePortalCinematic(dt);
-    if (!__portalCamLock) {
+    const __guidedCamLock = this.updateGuidedPortalCinematic(dt);
+    if (!__portalCamLock && !__guidedCamLock) {
       this.tpc.update(this.player.position, dt, {
         facingYaw: this.player.facingYaw,
         lastMoveWorld: this.player.lastMoveWorld,
@@ -1477,6 +1571,7 @@ if (e.code === "KeyK" && e.shiftKey) {
 
   private interact(): void {
     if (this.npcPlaceActive) return;
+    if (this.isMobileGuidedActive()) return;
     if (!this.focus) return;
 
 
@@ -1733,6 +1828,15 @@ for (const it of bakedToCollect) {
         this.focus = null;
         this.ui.showPrompt(null);
       }
+      this.mobileControls.setActionState({ label: "Talk", visible: false });
+      return;
+    }
+
+    if (this.isMobileGuidedActive()) {
+      if (this.focus !== null) {
+        this.focus = null;
+      }
+      this.ui.showPrompt(null);
       this.mobileControls.setActionState({ label: "Talk", visible: false });
       return;
     }
@@ -2419,20 +2523,15 @@ private render(): void {
     return panelOpen || dialogueOpen;
   }
 
-  // SWEETLAND_PORTAL_CINEMATIC_V1
-  private enterPortal(id: PortfolioSectionId): void {
-    if (this.portalCine || this.portalUiOpen) return;
+  private buildPortalCameraPose(
+    id: PortfolioSectionId,
+    distance: number,
+    height: number,
+    lookHeight: number
+  ): GuidedPortalView | null {
     const portal = this.level.portals.get(id);
-    if (!portal) return;
+    if (!portal) return null;
 
-    // SWEETLAND_PORTAL_CINEMATIC_V1B_RESTORE
-    if (this.portalGameplayFov == null) this.portalGameplayFov = this.camera.fov;
-
-    // Hide prompt and clear focus immediately.
-    this.focus = null;
-    this.ui.showPrompt(null);
-
-    // Compute a camera pose on the same side as the player, but closer to the portal.
     const portalPos = new THREE.Vector3();
     portal.group.getWorldPosition(portalPos);
 
@@ -2447,13 +2546,65 @@ private render(): void {
 
     const toPos = portalPos
       .clone()
-      .addScaledVector(side, 4.2)
-      .add(new THREE.Vector3(0, 2.2, 0));
+      .addScaledVector(side, distance)
+      .add(new THREE.Vector3(0, height, 0));
 
-    const lookAt = portalPos.clone().add(new THREE.Vector3(0, 2.4, 0));
+    const lookAt = portalPos.clone().add(new THREE.Vector3(0, lookHeight, 0));
     const dummy = new THREE.PerspectiveCamera();
     dummy.position.copy(toPos);
     dummy.lookAt(lookAt);
+
+    return {
+      id,
+      toPos,
+      toQuat: dummy.quaternion.clone(),
+      toFov: 34,
+    };
+  }
+
+  private startGuidedPortalView(id: PortfolioSectionId): void {
+    const target = this.buildPortalCameraPose(id, 5.4, 2.8, 2.6);
+    if (!target) return;
+
+    let facingYaw = this.player.facingYaw;
+    this.guidedPortalView = null;
+    this.guidedPortalCine = {
+      id,
+      t: 0,
+      dur: 0.65,
+      fromPos: this.camera.position.clone(),
+      fromQuat: this.camera.quaternion.clone(),
+      fromFov: this.camera.fov,
+      toPos: target.toPos.clone(),
+      toQuat: target.toQuat.clone(),
+      toFov: target.toFov,
+    };
+
+    if ((this.player as any).setRotationY) {
+      const portalPos = new THREE.Vector3();
+      this.level.portals.get(id)?.group.getWorldPosition(portalPos);
+      const dx = portalPos.x - this.player.position.x;
+      const dz = portalPos.z - this.player.position.z;
+      if (dx * dx + dz * dz > 0.001) {
+        facingYaw = Math.atan2(dx, dz);
+        (this.player as any).setRotationY(facingYaw);
+      }
+    }
+    this.tpc.snapBehind(this.player.position, facingYaw);
+  }
+
+  // SWEETLAND_PORTAL_CINEMATIC_V1
+  private enterPortal(id: PortfolioSectionId): void {
+    if (this.portalCine || this.portalUiOpen) return;
+    const target = this.buildPortalCameraPose(id, 4.2, 2.2, 2.4);
+    if (!target) return;
+
+    // SWEETLAND_PORTAL_CINEMATIC_V1B_RESTORE
+    if (this.portalGameplayFov == null) this.portalGameplayFov = this.camera.fov;
+
+    // Hide prompt and clear focus immediately.
+    this.focus = null;
+    this.ui.showPrompt(null);
 
     this.portalCine = {
       phase: "enter",
@@ -2463,9 +2614,9 @@ private render(): void {
       fromPos: this.camera.position.clone(),
       fromQuat: this.camera.quaternion.clone(),
       fromFov: this.camera.fov,
-      toPos,
-      toQuat: dummy.quaternion.clone(),
-      toFov: 34
+      toPos: target.toPos.clone(),
+      toQuat: target.toQuat.clone(),
+      toFov: target.toFov
     };
 
     // Release pointer lock so the user can click the preview link.
@@ -2506,6 +2657,42 @@ private render(): void {
           return false;
         }
       } catch {}
+      return true;
+    }
+
+    return false;
+  }
+
+  private updateGuidedPortalCinematic(dt: number): boolean {
+    if (this.guidedPortalCine) {
+      const c = this.guidedPortalCine;
+      c.t += dt;
+      const u = Math.min(1, c.t / c.dur);
+      const e = u * u * (3 - 2 * u);
+
+      this.camera.position.lerpVectors(c.fromPos, c.toPos, e);
+      this.camera.quaternion.copy(c.fromQuat).slerp(c.toQuat, e);
+      this.camera.fov = c.fromFov + (c.toFov - c.fromFov) * e;
+      this.camera.updateProjectionMatrix();
+
+      if (u >= 1) {
+        this.guidedPortalView = {
+          id: c.id,
+          toPos: c.toPos.clone(),
+          toQuat: c.toQuat.clone(),
+          toFov: c.toFov,
+        };
+        this.guidedPortalCine = null;
+        (this.tpc as any).syncFromCamera?.();
+      }
+      return true;
+    }
+
+    if (this.guidedPortalView) {
+      this.camera.position.copy(this.guidedPortalView.toPos);
+      this.camera.quaternion.copy(this.guidedPortalView.toQuat);
+      this.camera.fov = this.guidedPortalView.toFov;
+      this.camera.updateProjectionMatrix();
       return true;
     }
 

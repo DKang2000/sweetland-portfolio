@@ -108,13 +108,13 @@ export class UI {
 
     if (profile.isMobileExperience) {
       this.setDesktopHelpOpen(false);
-      this.loadingTitle.textContent = "Tap to Enter Sweet Land";
+      this.loadingTitle.textContent = "Sweet Land is waking up";
       this.loadingSub.innerHTML = profile.isPortrait
-        ? "Rotate sideways for the full mobile game layout.<br>Landscape gives you the full control deck, auto-follow camera, and room to explore the castle like a handheld game."
-        : "Built for landscape mobile play.<br>Move with the left stick, let the camera trail you automatically, tap the middle of the stick to jump, and use the action button to talk and enter portals.";
+        ? "The guided mobile tour is loading first.<br>Explore Mode is still here when you want the full free-roam castle."
+        : "The castle is loading.<br>Quick Tour stays portrait-first, and Explore Mode keeps the full mobile 3D roam.";
       this.helpText.innerHTML = profile.isPortrait
-        ? '<span class="kbd">Rotate</span> sideways for best play · <span class="kbd">Stick</span> move · <span class="kbd">Action</span> talk / enter'
-        : '<span class="kbd">Stick</span> move · camera auto-follows · <span class="kbd">Stick center</span> jump · <span class="kbd">Action</span> talk / enter · <span class="kbd">Swipe</span> optional look';
+        ? 'Quick Tour is ready for one-thumb portrait play · Explore Mode still works best sideways'
+        : 'Explore Mode keeps the joystick, action button, and free-roam castle · Quick Tour stays tap-first';
       this.promptHintEl.textContent = "Tap to interact";
       this.panelEmbedNote.textContent = "Open the page for the full portal destination.";
     } else {
