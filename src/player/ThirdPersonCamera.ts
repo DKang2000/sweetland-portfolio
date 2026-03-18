@@ -3,12 +3,13 @@ import { clamp } from "../core/clamp";
 
 const FIXED_PITCH = -0.15;
 const DESKTOP_MANUAL_ORBIT_COOLDOWN = 1.05;
-const DESKTOP_FORWARD_INTENT_THRESHOLD = 0.18;
-const DESKTOP_BACKWARD_INTENT_THRESHOLD = -0.45;
-const DESKTOP_STRAFE_ONLY_THRESHOLD = 0.3;
-const DESKTOP_YAW_FOLLOW_SHARPNESS = 0.004;
-const DESKTOP_YAW_BACKPEDAL_SHARPNESS = 0.02;
-const DESKTOP_YAW_RECENTER_SHARPNESS = 0.016;
+const DESKTOP_FORWARD_INTENT_THRESHOLD = 0.08;
+const DESKTOP_BACKWARD_INTENT_THRESHOLD = -0.35;
+const DESKTOP_DIRECTION_CHANGE_THRESHOLD = 0.16;
+const DESKTOP_STRAFE_ONLY_THRESHOLD = 0.42;
+const DESKTOP_YAW_FOLLOW_SHARPNESS = 0.0009;
+const DESKTOP_YAW_BACKPEDAL_SHARPNESS = 0.01;
+const DESKTOP_YAW_RECENTER_SHARPNESS = 0.004;
 
 export type CameraFollowState = {
   facingYaw: number;
@@ -208,24 +209,36 @@ export class ThirdPersonCamera {
       absStrafe >= DESKTOP_STRAFE_ONLY_THRESHOLD && absForward < DESKTOP_FORWARD_INTENT_THRESHOLD;
 
     if (strafeOnly) {
-      return null;
+      const strafeYaw = wrapAngle(this.lastAutoFollowYaw);
+      const yawGap = Math.abs(angleDelta(this.yaw, strafeYaw));
+      return yawGap < 0.18 ? { yaw: strafeYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS } : null;
     }
 
-    const desiredYaw = wrapAngle(followState.lastNonZeroMoveYaw + Math.PI);
+    const desiredYaw = wrapAngle(followState.facingYaw + Math.PI);
     const yawGap = Math.abs(angleDelta(this.yaw, desiredYaw));
+    const directionalChange =
+      absForward >= DESKTOP_DIRECTION_CHANGE_THRESHOLD && absStrafe >= DESKTOP_DIRECTION_CHANGE_THRESHOLD;
 
     if (followState.moveInputForward >= DESKTOP_FORWARD_INTENT_THRESHOLD) {
       return { yaw: desiredYaw, sharpness: DESKTOP_YAW_FOLLOW_SHARPNESS };
     }
 
+    if (directionalChange) {
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_FOLLOW_SHARPNESS };
+    }
+
     if (followState.moveInputForward <= DESKTOP_BACKWARD_INTENT_THRESHOLD) {
-      if (yawGap < 0.45) {
+      if (yawGap < 0.65) {
         return { yaw: desiredYaw, sharpness: DESKTOP_YAW_BACKPEDAL_SHARPNESS };
       }
       return null;
     }
 
-    if (absForward >= 0.12 || (absStrafe < 0.22 && yawGap < 0.35)) {
+    if (absStrafe > 0.12 && yawGap < 0.3) {
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
+    }
+
+    if (absForward >= 0.04 || yawGap < 0.45) {
       return { yaw: desiredYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
     }
 
