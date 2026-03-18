@@ -105,6 +105,7 @@
         <div class="mobile-top mobile-left-stack">
           <button id="mobileMuteButton" class="btn small mobile-button" type="button">Sound On</button>
           <button id="mobileRespawnButton" class="btn small mobile-button" type="button">Respawn</button>
+          <button id="mobileResetButton" class="btn small mobile-button mobile-reset" type="button">Reset</button>
         </div>
 
         <div class="mobile-top mobile-right-stack">
@@ -116,14 +117,19 @@
         <div id="mobileLookRegion" aria-hidden="true"></div>
 
         <div class="mobile-bottom">
-          <div id="mobileJoystick" class="mobile-joystick" aria-label="Movement joystick">
-            <div class="mobile-joystick-center"></div>
-            <div id="mobileJoystickKnob" class="mobile-joystick-knob"></div>
+          <div class="mobile-move-cluster">
+            <div class="mobile-cluster-label">Move</div>
+            <div class="mobile-cluster-copy">Tap the stick center to jump</div>
+            <div id="mobileJoystick" class="mobile-joystick" aria-label="Movement joystick">
+              <div class="mobile-joystick-center"></div>
+              <div id="mobileJoystickKnob" class="mobile-joystick-knob"></div>
+            </div>
           </div>
 
           <div class="mobile-action-cluster">
-            <button id="mobileResetButton" class="btn small mobile-button mobile-reset" type="button">Reset</button>
+            <div class="mobile-cluster-label mobile-cluster-label-right">Action</div>
             <button id="mobileActionButton" class="btn mobile-action hidden" type="button">Talk</button>
+            <div class="mobile-look-hint">Swipe the right half to orbit when you want a better angle</div>
           </div>
         </div>
 

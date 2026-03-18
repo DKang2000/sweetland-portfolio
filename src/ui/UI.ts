@@ -90,11 +90,11 @@ export class UI {
     if (profile.isMobileExperience) {
       this.loadingTitle.textContent = "Tap to Enter Sweet Land";
       this.loadingSub.innerHTML = profile.isPortrait
-        ? "Rotate sideways for the full mobile game layout.<br>Move with the joystick, let the camera follow you, tap the middle of the joystick to jump, and use the action button to talk and enter portals."
-        : "Best played sideways like a mobile adventure.<br>Move with the joystick, let the camera follow you, drag the right side optionally to look around, tap the middle of the joystick to jump, and use the action button to talk and enter portals.";
+        ? "Rotate sideways for the full mobile game layout.<br>Landscape gives you the full control deck, auto-follow camera, and room to explore the castle like a handheld game."
+        : "Built for landscape mobile play.<br>Move with the left stick, let the camera trail you automatically, tap the middle of the stick to jump, and use the action button to talk and enter portals.";
       this.helpText.innerHTML = profile.isPortrait
         ? '<span class="kbd">Rotate</span> sideways for best play · <span class="kbd">Stick</span> move · <span class="kbd">Action</span> talk / enter'
-        : '<span class="kbd">Stick</span> move · camera auto-follows · <span class="kbd">Drag</span> optional look · <span class="kbd">Stick center</span> jump · <span class="kbd">Action</span> talk / enter';
+        : '<span class="kbd">Stick</span> move · camera auto-follows · <span class="kbd">Stick center</span> jump · <span class="kbd">Action</span> talk / enter · <span class="kbd">Swipe</span> optional look';
       this.promptHintEl.textContent = "Tap to interact";
       this.panelEmbedNote.textContent = "Open the page for the full portal destination.";
     } else {

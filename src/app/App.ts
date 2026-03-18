@@ -1460,8 +1460,10 @@ if (e.code === "KeyK" && e.shiftKey) {
         lastMoveWorld: this.player.lastMoveWorld,
         lastNonZeroMoveYaw: this.player.lastNonZeroMoveYaw,
         hasMeaningfulMovement: this.player.hasMeaningfulMovement,
+        grounded: this.player.grounded,
         moveInputForward: this.player.moveInputForward,
         moveInputRight: this.player.moveInputRight,
+        manualLookActive: this.device.current.isMobileExperience && this.input.isTouchLooking(),
       });
     }
 
@@ -2515,6 +2517,7 @@ private render(): void {
     if (!spot) return;
     // teleport a little above to avoid embedding
     this.player.setPosition(spot.clone().add(new THREE.Vector3(0, 0.6, 0)));
+    this.tpc.snapBehind(this.player.position, this.player.facingYaw);
   }
 
   private warpToHub(): void {
@@ -2522,6 +2525,7 @@ private render(): void {
     this.player.setPosition(new THREE.Vector3(-33.7, 6.921, 22.758));
     // Optional facing
     if ((this.player as any).setRotationY) (this.player as any).setRotationY(1.939);
+    this.tpc.snapBehind(this.player.position, this.player.facingYaw);
 }
 
   private resetCoins(): void {

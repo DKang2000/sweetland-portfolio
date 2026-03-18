@@ -13,7 +13,7 @@ Phones still explore the live Three.js world, collect items, talk to NPCs, and e
 - Jump by tapping the center of the joystick.
 - Use the bottom-right action button to `Talk` or `Enter` when a target is focused.
 - Tap the on-screen prompt pill for the same interaction shortcut.
-- Use the top buttons for mute, respawn, portals, minimap, low/high FX, and reset collectibles.
+- Use the top buttons for mute, respawn, reset, portals, minimap, and low/high FX.
 - Use the `Portals` drawer to teleport to a portal pedestal without skipping the in-world portal interaction.
 
 ## Architecture
