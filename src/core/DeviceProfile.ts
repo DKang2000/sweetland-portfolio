@@ -70,7 +70,7 @@ export function detectDeviceProfile(): DeviceProfile {
 
   const isMobileExperience = inferredMobile;
   const useLowFx = forceLowFx || isMobileExperience;
-  const useCompactMinimap = isMobileExperience && (isPhoneLike || viewportWidth <= 520);
+  const useCompactMinimap = isMobileExperience && (isPortrait || viewportWidth <= 520);
 
   return {
     isMobileExperience,

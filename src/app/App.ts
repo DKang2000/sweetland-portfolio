@@ -1074,8 +1074,8 @@ if (e.code === "KeyK" && e.shiftKey) {
       this.player.applyFeelProfile(profile.isMobileExperience ? "mobile" : "desktop");
     }
 
-    if (!this.minimapPreferenceLocked && profile.isMobileExperience && profile.useCompactMinimap) {
-      this.minimapVisible = false;
+    if (!this.minimapPreferenceLocked && profile.isMobileExperience) {
+      this.minimapVisible = !profile.useCompactMinimap;
     } else if (!this.minimapPreferenceLocked && !profile.isMobileExperience) {
       this.minimapVisible = true;
     }
@@ -1381,7 +1381,7 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     const __portalLock = !!this.portalCine || this.portalUiOpen;
     if (!__portalLock) {
-      this.player.update(dt, this.tpc.getMovementYaw());
+      this.player.update(dt, this.tpc.yaw);
     } else {
       // Consume mouse deltas so they don't accumulate while pointer is unlocked.
       this.input.consumeMouseDelta();

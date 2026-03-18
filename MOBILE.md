@@ -7,8 +7,9 @@ Phones still explore the live Three.js world, collect items, talk to NPCs, and e
 
 ## Mobile Controls
 
+- Mobile is now landscape-first and is meant to be held sideways like a handheld game.
 - Move with the bottom-left joystick.
-- Drag the right side of the screen to orbit the camera.
+- Let the chase camera auto-follow during traversal, or drag the right side of the screen when you want a temporary manual look.
 - Jump by tapping the center of the joystick.
 - Use the bottom-right action button to `Talk` or `Enter` when a target is focused.
 - Tap the on-screen prompt pill for the same interaction shortcut.
@@ -30,25 +31,25 @@ Phones still explore the live Three.js world, collect items, talk to NPCs, and e
 - `src/core/InputActions.ts`
   - Central semantic action layer for movement, look, jump, interact, mute, respawn, portal shortcuts, map toggle, quality toggle, and reset collectibles.
 - `src/ui/MobileControls.ts`
-  - Owns the portrait-first mobile overlay, joystick, touch look region, utility buttons, and portal drawer.
+  - Owns the landscape-first mobile overlay, joystick, touch look region, utility buttons, and portal drawer.
 - `src/ui/UI.ts`
   - Adapts prompt behavior, loading copy, dialogue sheets, and portal panels for mobile while preserving desktop behavior.
 - `src/ui/WebGLFallback.ts`
   - Renders a branded portal fallback if WebGL or scene startup fails.
 
-## Portrait-First Decisions
+## Landscape-First Decisions
 
-- The joystick sits bottom-left and the action button sits bottom-right for thumb reach in portrait.
-- Utility controls live near the top corners and respect safe areas / notches.
-- The center of the screen stays as open as possible for world visibility.
-- Dialogue becomes a bottom sheet and portal content becomes a portrait-friendly sheet with a strong primary CTA.
-- The minimap is collapsed by default on compact mobile layouts and can be toggled back on.
+- The joystick sits bottom-left and the action button sits bottom-right so the world reads like a handheld third-person game in landscape.
+- Utility controls live in compact pods near the top corners and respect safe areas / notches.
+- The center of the screen stays as open as possible for world visibility and optional right-thumb look gestures.
+- Dialogue, loading, and portal panels center themselves as game overlays in landscape, while portrait remains a reduced fallback.
+- The minimap now defaults on when mobile has enough horizontal room and collapses on portrait / compact layouts.
 
 ## Performance Profile
 
 - Mobile / low-FX mode clamps DPR lower than desktop.
 - Shadow quality is reduced in low-FX mode.
-- Minimap updates are throttled on mobile and hidden by default on compact portrait layouts.
+- Minimap updates are throttled on mobile and hidden by default on portrait / compact layouts.
 - The boot shell now dynamically loads the heavy 3D runtime so the first page payload is lighter and the loading UI can paint before the full game code arrives.
 - Vite output is chunked more deliberately so Three.js core, Three.js extras, Rapier, GSAP, fallback UI, and runtime code can cache independently.
 - Rapier and `GLTFLoader` are now behind async import boundaries, so physics and model-loader code are requested only when scene bootstrap actually needs them.

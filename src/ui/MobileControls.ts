@@ -97,7 +97,7 @@ export class MobileControls {
 
   applyProfile(profile: DeviceProfile): void {
     this.root.dataset.orientation = profile.isPortrait ? "portrait" : "landscape";
-    this.root.dataset.compact = profile.isPortraitPrimary ? "1" : "0";
+    this.root.dataset.compact = profile.isPortrait ? "1" : "0";
     this.setEnabled(profile.isMobileExperience);
   }
 

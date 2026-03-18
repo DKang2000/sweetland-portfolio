@@ -23,6 +23,7 @@ type JumpTarget = {
 };
 
 export class Player {
+  private readonly moveInputEpsilon = 0.001;
   private readonly desktopWalkSpeed = 6.0;
   private readonly desktopRunSpeed = 9.5;
   private readonly desktopJumpSpeed = 10.0;
@@ -83,6 +84,12 @@ export class Player {
   hasMeaningfulMovement = false;
   moveInputForward = 0;
   moveInputRight = 0;
+  private feelProfile: "desktop" | "mobile" = "desktop";
+  private desktopMovementYaw = 0;
+  private hasDesktopMovementYaw = false;
+  private hadDesktopMoveInput = false;
+  private lastDesktopMoveInputForward = 0;
+  private lastDesktopMoveInputRight = 0;
 
   // Jump animation gating:
   private jumpAnimLock = 0;
@@ -710,12 +717,15 @@ private async loadAvatar(): Promise<void> {
   }
 
   applyFeelProfile(kind: "desktop" | "mobile"): void {
+    this.feelProfile = kind;
+
     if (kind === "mobile") {
       this.walkSpeed = this.mobileWalkSpeed;
       this.runSpeed = this.mobileRunSpeed;
       this.jumpSpeed = this.mobileJumpSpeed;
       this.gravity = this.mobileGravity;
       this.autoRunThreshold = 0.7;
+      this.hadDesktopMoveInput = false;
       return;
     }
 
@@ -724,6 +734,7 @@ private async loadAvatar(): Promise<void> {
     this.jumpSpeed = this.desktopJumpSpeed;
     this.gravity = this.desktopGravity;
     this.autoRunThreshold = 0.92;
+    this.hadDesktopMoveInput = false;
   }
 
   setLadder(ladder: { center: THREE.Vector3; minY: number; maxY: number } | null): void {
@@ -748,8 +759,10 @@ private async loadAvatar(): Promise<void> {
     this.moveInputForward = fIn;
     this.moveInputRight = rIn;
 
-    // Build movement basis from camera yaw
-    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
+    const movementYaw = this.resolveMovementYaw(cameraYaw, fIn, rIn);
+
+    // Build movement basis from the current desktop movement frame.
+    const yawQ = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), movementYaw);
     const camForward = new THREE.Vector3(0, 0, -1).applyQuaternion(yawQ);
     const camRight = new THREE.Vector3(1, 0, 0).applyQuaternion(yawQ);
 
@@ -968,6 +981,36 @@ private async loadAvatar(): Promise<void> {
     this.facingYaw = this.mesh.rotation.y;
 
     this.updateAnim(dt);
+  }
+
+  private resolveMovementYaw(cameraYaw: number, fIn: number, rIn: number): number {
+    if (this.feelProfile !== "desktop") {
+      return cameraYaw;
+    }
+
+    const hasMoveInput =
+      Math.abs(fIn) > this.moveInputEpsilon || Math.abs(rIn) > this.moveInputEpsilon;
+    const inputChanged =
+      Math.abs(fIn - this.lastDesktopMoveInputForward) > this.moveInputEpsilon ||
+      Math.abs(rIn - this.lastDesktopMoveInputRight) > this.moveInputEpsilon;
+
+    this.lastDesktopMoveInputForward = fIn;
+    this.lastDesktopMoveInputRight = rIn;
+
+    if (!hasMoveInput) {
+      this.desktopMovementYaw = cameraYaw;
+      this.hasDesktopMovementYaw = true;
+      this.hadDesktopMoveInput = false;
+      return cameraYaw;
+    }
+
+    if (!this.hasDesktopMovementYaw || !this.hadDesktopMoveInput || inputChanged) {
+      this.desktopMovementYaw = cameraYaw;
+      this.hasDesktopMovementYaw = true;
+    }
+
+    this.hadDesktopMoveInput = true;
+    return this.desktopMovementYaw;
   }
 
   private updateAnim(dt: number): void {
