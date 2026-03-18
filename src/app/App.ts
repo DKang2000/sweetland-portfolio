@@ -1381,7 +1381,7 @@ if (e.code === "KeyK" && e.shiftKey) {
 
     const __portalLock = !!this.portalCine || this.portalUiOpen;
     if (!__portalLock) {
-      this.player.update(dt, this.tpc.yaw);
+      this.player.update(dt, this.tpc.getMovementYaw());
     } else {
       // Consume mouse deltas so they don't accumulate while pointer is unlocked.
       this.input.consumeMouseDelta();

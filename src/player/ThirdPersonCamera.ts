@@ -68,6 +68,14 @@ export class ThirdPersonCamera {
 
   constructor(private camera: THREE.PerspectiveCamera) {}
 
+  getMovementYaw(): number {
+    if (this.desktopAutoFollowEnabled && this.feelProfile === "desktop" && this.manualOrbitCooldown <= 0) {
+      return wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * 0.75);
+    }
+
+    return this.yaw;
+  }
+
   updateFromMouse(dx: number, dy: number): void {
     this.yaw -= dx * this.lookSensitivity;
     this.pitch -= dy * this.lookSensitivity;
@@ -187,12 +195,12 @@ export class ThirdPersonCamera {
       return;
     }
 
+    this.targetYaw = followTarget.yaw;
     this.lastAutoFollowYaw = followTarget.yaw;
     if (this.manualOrbitCooldown > 0) {
       return;
     }
 
-    this.targetYaw = followTarget.yaw;
     this.yaw = wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * dampFactor(followTarget.sharpness, dt));
   }
 
