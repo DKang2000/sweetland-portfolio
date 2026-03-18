@@ -17,7 +17,7 @@ Desktop still runs the live 3D Candy Castle. Mobile now renders a simple branded
 
 The mobile card tells visitors:
 
-- `Please visit imchloekang.com on a mobile site for the best experience.`
+- `Please visit imchloekang.com on a desktop site for the best experience.`
 
 and provides a primary CTA that opens [chloeverse.io](https://chloeverse.io).
 

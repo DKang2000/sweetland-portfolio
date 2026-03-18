@@ -24,7 +24,7 @@ export function renderWebGLFallback(input?: string | WebGLFallbackOptions): void
   if (profile && resolvedMobileMode && shouldUseMobileFrontDoor(profile, resolvedMobileMode)) {
     renderMobileRedirect({
       message:
-        message ?? "Please visit imchloekang.com on a mobile site for the best experience.",
+        message ?? "Please visit imchloekang.com on a desktop site for the best experience.",
       ctaLabel: "Open Chloeverse Mobile",
     });
     return;

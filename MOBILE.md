@@ -7,7 +7,7 @@ This repo now serves the live Candy Castle experience on desktop and a simplifie
 On mobile devices:
 
 - the app now shows a branded redirect card instead of booting the 3D castle
-- the message tells visitors: `Please visit imchloekang.com on a mobile site for the best experience.`
+- the message tells visitors: `Please visit imchloekang.com on a desktop site for the best experience.`
 - the primary button opens `https://chloeverse.io`
 
 Desktop behavior remains unchanged.

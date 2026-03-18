@@ -20,7 +20,7 @@ export function renderMobileRedirect(options: MobileRedirectOptions = {}): void 
 
   const message =
     options.message ??
-    "Please visit imchloekang.com on a mobile site for the best experience.";
+    "Please visit imchloekang.com on a desktop site for the best experience.";
   const ctaLabel = options.ctaLabel ?? "Open Chloeverse Mobile";
 
   app.innerHTML = `
