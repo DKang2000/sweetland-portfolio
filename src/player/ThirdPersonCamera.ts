@@ -10,6 +10,7 @@ const DESKTOP_STRAFE_ONLY_THRESHOLD = 0.42;
 const DESKTOP_YAW_FOLLOW_SHARPNESS = 0.0009;
 const DESKTOP_YAW_BACKPEDAL_SHARPNESS = 0.01;
 const DESKTOP_YAW_RECENTER_SHARPNESS = 0.004;
+const DESKTOP_CONTROL_YAW_SHARPNESS = 0.72;
 
 export type CameraFollowState = {
   facingYaw: number;
@@ -47,6 +48,7 @@ export class ThirdPersonCamera {
   private _tmp = new THREE.Vector3();
   private desiredPos = new THREE.Vector3();
   private targetYaw = 0;
+  private controlYaw = 0;
   private lastAutoFollowYaw = 0;
   private manualOrbitCooldown = 0;
   private desktopAutoFollowEnabled = true;
@@ -70,7 +72,7 @@ export class ThirdPersonCamera {
 
   getMovementYaw(): number {
     if (this.desktopAutoFollowEnabled && this.feelProfile === "desktop") {
-      return wrapAngle(this.targetYaw + Math.PI);
+      return this.controlYaw;
     }
 
     return this.yaw;
@@ -99,6 +101,7 @@ export class ThirdPersonCamera {
       this.desktopAutoFollowEnabled = false;
       this.manualOrbitCooldown = 0;
       this.targetYaw = this.yaw;
+      this.controlYaw = this.yaw;
       this.lastAutoFollowYaw = this.yaw;
       return;
     }
@@ -109,6 +112,7 @@ export class ThirdPersonCamera {
     this.followSharpness = 0.001;
     this.desktopAutoFollowEnabled = true;
     this.targetYaw = this.yaw;
+    this.controlYaw = this.yaw;
     this.lastAutoFollowYaw = this.yaw;
   }
 
@@ -183,6 +187,7 @@ export class ThirdPersonCamera {
     if (this._tmp.x * this._tmp.x + this._tmp.z * this._tmp.z > 0.0001) {
       this.yaw = Math.atan2(this._tmp.x, this._tmp.z);
       this.targetYaw = this.yaw;
+      this.controlYaw = this.yaw;
       this.lastAutoFollowYaw = this.yaw;
     }
   }
@@ -191,24 +196,31 @@ export class ThirdPersonCamera {
     this.manualOrbitCooldown = Math.max(0, this.manualOrbitCooldown - dt);
 
     const followTarget = this.getDesktopFollowTarget(followState);
-    if (!followTarget) {
-      return;
+    if (followTarget) {
+      this.targetYaw = followTarget.yaw;
+      this.lastAutoFollowYaw = followTarget.yaw;
+    } else if (this.manualOrbitCooldown <= 0) {
+      this.targetYaw = this.lastAutoFollowYaw;
     }
 
-    this.targetYaw = followTarget.yaw;
-    this.lastAutoFollowYaw = followTarget.yaw;
     if (this.manualOrbitCooldown > 0) {
       return;
     }
 
-    this.yaw = wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * dampFactor(followTarget.sharpness, dt));
+    this.controlYaw = wrapAngle(
+      this.controlYaw +
+        angleDelta(this.controlYaw, this.targetYaw) * dampFactor(DESKTOP_CONTROL_YAW_SHARPNESS, dt)
+    );
+
+    const yawSharpness = followTarget?.sharpness ?? DESKTOP_YAW_RECENTER_SHARPNESS;
+    this.yaw = wrapAngle(this.yaw + angleDelta(this.yaw, this.targetYaw) * dampFactor(yawSharpness, dt));
   }
 
   private getDesktopFollowTarget(
     followState: CameraFollowState
   ): { yaw: number; sharpness: number } | null {
     if (!followState.hasMeaningfulMovement) {
-      return null;
+      return { yaw: this.lastAutoFollowYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
     }
 
     const absForward = Math.abs(followState.moveInputForward);
@@ -217,13 +229,10 @@ export class ThirdPersonCamera {
       absStrafe >= DESKTOP_STRAFE_ONLY_THRESHOLD && absForward < DESKTOP_FORWARD_INTENT_THRESHOLD;
 
     if (strafeOnly) {
-      const strafeYaw = wrapAngle(this.lastAutoFollowYaw);
-      const yawGap = Math.abs(angleDelta(this.yaw, strafeYaw));
-      return yawGap < 0.18 ? { yaw: strafeYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS } : null;
+      return { yaw: this.lastAutoFollowYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
     }
 
     const desiredYaw = wrapAngle(followState.facingYaw + Math.PI);
-    const yawGap = Math.abs(angleDelta(this.yaw, desiredYaw));
     const directionalChange =
       absForward >= DESKTOP_DIRECTION_CHANGE_THRESHOLD && absStrafe >= DESKTOP_DIRECTION_CHANGE_THRESHOLD;
 
@@ -236,20 +245,17 @@ export class ThirdPersonCamera {
     }
 
     if (followState.moveInputForward <= DESKTOP_BACKWARD_INTENT_THRESHOLD) {
-      if (yawGap < 0.65) {
-        return { yaw: desiredYaw, sharpness: DESKTOP_YAW_BACKPEDAL_SHARPNESS };
-      }
-      return null;
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_BACKPEDAL_SHARPNESS };
     }
 
-    if (absStrafe > 0.12 && yawGap < 0.3) {
+    if (absStrafe > 0.12) {
+      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_BACKPEDAL_SHARPNESS };
+    }
+
+    if (absForward >= 0.04) {
       return { yaw: desiredYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
     }
 
-    if (absForward >= 0.04 || yawGap < 0.45) {
-      return { yaw: desiredYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
-    }
-
-    return null;
+    return { yaw: this.lastAutoFollowYaw, sharpness: DESKTOP_YAW_RECENTER_SHARPNESS };
   }
 }
