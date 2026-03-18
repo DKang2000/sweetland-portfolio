@@ -3,6 +3,7 @@ import { clamp } from "../core/clamp";
 
 const FIXED_PITCH = -0.15;
 const DESKTOP_MANUAL_ORBIT_COOLDOWN = 1.05;
+const DESKTOP_MOVING_ORBIT_COOLDOWN_MULTIPLIER = 2.4;
 const DESKTOP_FORWARD_INTENT_THRESHOLD = 0.08;
 const DESKTOP_BACKWARD_INTENT_THRESHOLD = -0.35;
 const DESKTOP_DIRECTION_CHANGE_THRESHOLD = 0.16;
@@ -170,7 +171,14 @@ export class ThirdPersonCamera {
   }
 
   private updateDesktopAutoFollow(dt: number, followState: CameraFollowState): void {
-    this.manualOrbitCooldown = Math.max(0, this.manualOrbitCooldown - dt);
+    const cooldownDecay =
+      followState.hasMeaningfulMovement &&
+      (Math.abs(followState.moveInputForward) >= DESKTOP_FORWARD_INTENT_THRESHOLD ||
+        Math.abs(followState.moveInputRight) >= DESKTOP_DIRECTION_CHANGE_THRESHOLD)
+        ? DESKTOP_MOVING_ORBIT_COOLDOWN_MULTIPLIER
+        : 1;
+
+    this.manualOrbitCooldown = Math.max(0, this.manualOrbitCooldown - dt * cooldownDecay);
 
     const followTarget = this.getDesktopFollowTarget(followState);
     if (!followTarget) {
